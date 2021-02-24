@@ -1034,13 +1034,11 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
         it1 = it + 1
 
 
-!write (*,*) 'about to multiply'
         call lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,&
      &iptype,npts,srccoefs,srcvals,ndtarg,npts,targs,&
      &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,&
      &vmat(1,it),novers,npts_over,ixyzso,srcover,wover,wtmp,wnear,&
      &n_components,contrast_matrix,npts_vect)
-!write (*,*) 'done first multiplication'
 
         do k=1,it
           hmat(k,it) = 0
@@ -1709,10 +1707,6 @@ return
 end subroutine em_muller_trans_FMM_targ
 
 
-
-
-
-
 subroutine em_muller_trans_v2(srcinfo, ndt,targinfo,ndd, dpars,ndz,zpars,&
  &ndi,ipars,E_val)
 implicit none
@@ -2051,33 +2045,11 @@ implicit none
 
   return
   end subroutine build_extended_targ
-
-subroutine fieldsPWzomega(omega,ep,mu,xyz,n,E,H)
-! a plane wave; that is: E=exp(ima*zk*z) ux
-! H=exp(ima*zk*z) uy
-
-	integer, intent(in) :: n
-	real ( kind = 8 ), intent(in) :: xyz(12,n)
-	complex ( kind = 8 ), intent(in) :: omega,ep,mu
-	complex *16 E(3,n),H(3,n)
-	complex *16 ima,zk,eta
-	integer i
-	data ima/(0.0d0,1.0d0)/
-
-	  zk=omega*sqrt(ep*mu)
-	  eta=sqrt(mu/ep)
-      do i=1,n
-        H(1,i)=0
-        H(2,i)=exp(ima*zk*xyz(3,i))/eta
-        H(3,i)=0
-        E(1,i)=exp(ima*zk*xyz(3,i))
-        E(2,i)=0
-        E(3,i)=0
-      enddo
-
-return
-end subroutine fieldsPWzomega
-
+!
+!
+!
+!
+!
 
 subroutine fieldsPWomega(omega,ep,mu,xyz,n,E,H,direction,Pol)
 ! a plane wave; that is: E=exp(ima*zk*z) ux
@@ -2116,7 +2088,12 @@ subroutine fieldsPWomega(omega,ep,mu,xyz,n,E,H,direction,Pol)
 
 return
 end subroutine fieldsPWomega
-
+!
+!
+!
+!
+!
+!  eliminate this routine, use existing routines and rescale
 
 subroutine open_gov3_geometry_v2(filename,npatches,norders,ixyzs, &
   iptype,npoints,srcvals,srccoefs,wts,dP)
@@ -2264,8 +2241,11 @@ subroutine open_gov3_geometry_v2(filename,npatches,norders,ixyzs, &
 
 return
 end subroutine open_gov3_geometry_v2
-
-
+!
+!
+!
+!
+!
 subroutine evaluate_field_muller(npatches,norders,ixyzs,iptype,npts,srccoefs,&
     &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
     &contrast_matrix,exposed_surfaces,eps,zpars,sigma,E_far,H_far)
@@ -2397,9 +2377,11 @@ implicit none
     ntarg_vect(count1)=0
   enddo
 
+
   call find_inclusion_vect(npatches,norders,ixyzs,iptype,npts,srccoefs,&
     &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
     &location_targs,eps)
+  stop
   do count1=1,n_components
     if (exposed_surfaces(count1)) then
        ep0=contrast_matrix(1,count1)
@@ -2459,7 +2441,11 @@ implicit none
  enddo
 return
 end subroutine evaluate_field_muller
-
+!
+!
+!
+!
+!
 
       subroutine lpcomp_em_muller_far_dir(npatches,norders,ixyzs,&
        &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
@@ -2786,7 +2772,7 @@ end subroutine evaluate_field_muller
 !               number of entries in wnear
 !
 !        output
-!           wnear - complex *16(36*nquad)
+!           wnear - complex *16(nquad,12)
 !               the desired near field quadrature
 !
 
@@ -2794,7 +2780,6 @@ end subroutine evaluate_field_muller
       integer npatches,norders(npatches),npts,nquad
       integer ixyzs(npatches+1),iptype(npatches)
       real *8 srccoefs(9,npts),srcvals(12,npts),eps,rfac0
-      real *8 srcvals_extended(20,npts)
       integer ndtarg,ntarg
       integer iquadtype
       real *8 targs(ndtarg,ntarg)
@@ -2802,8 +2787,8 @@ end subroutine evaluate_field_muller
       integer nnz,ipars(2)
       real *8 dpars(1)
       integer row_ptr(ntarg+1),col_ind(nnz),iquad(nnz+1)
-      complex *16 wnear(12*nquad)
-	  
+      complex *16 wnear(nquad,12)
+  
       integer ipatch_id(ntarg)
       real *8 uvs_targ(2,ntarg)
 
@@ -2818,149 +2803,36 @@ end subroutine evaluate_field_muller
       external  em_muller_far
 
      ndz=3
-	   ndd=1
-	   ndi=2
-	   ipv=1
+     ndd=1
+     ndi=2
+     ipv=1
 
-!!      fker => fker_em_muller_trans_v2
-!!	  fker => fker_em_muller_far
     fker => em_muller_far
 
-!    call system_clock ( t1, clock_rate, clock_max )
 
-	  icount=0
-	  do count1=1,3
-	    do count2=1,4
-		   ipars(1)=count1
-       ipars(2)=count2
-       call zgetnearquad_ggq_guru(npatches,norders,ixyzs,&
-		    &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
-		    &ipatch_id,uvs_targ,eps,ipv,fker,ndd,dpars,ndz,zpars,&
-		    &ndi,ipars,nnz,row_ptr,col_ind,iquad,rfac0,nquad,&
-		    &wnear(icount*nquad+1:(icount+1)*nquad))
-		   icount=icount+1
+    icount=1
+    do count1=1,3
+      do count2=1,4
+        ipars(1)=count1
+        ipars(2)=count2
+        call zgetnearquad_ggq_guru(npatches,norders,ixyzs,&
+         &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
+         &ipatch_id,uvs_targ,eps,ipv,fker,ndd,dpars,ndz,zpars,&
+         &ndi,ipars,nnz,row_ptr,col_ind,iquad,rfac0,nquad,&
+         &wnear(1,icount))
+         icount=icount+1
       enddo
-	  enddo
+    enddo
 
 
-!call system_clock ( t2, clock_rate, clock_max )
-!write (*,*) 'time quadratures: ',real(t2-t1)/real(clock_rate)
-!stop
     return
     end subroutine getnearquad_muller_far_dir
+!
+!
+!
+!
+!
 
-
-
-subroutine fker_em_muller_far(srcinfo, ndt,targinfo,ndd, dpars,ndz,&
- &zpars,ndi,ipars,E_val)
-implicit none
-
-!  THIS FUNCTION IS OBSOLETE, NOT USED, subroutine em_dfie_trans is ued
-!  instead (much faster), but very hard to read..
-!  this function provides the near field kernel that will use 
-!  zgetnearquad_ggq_guru 
-!  through getnearquad_DFIE
-
-    !List of calling arguments
-	integer, intent(in) :: ndt,ndd,ndz,ndi
-	real ( kind = 8 ), intent(in) :: srcinfo(12)
-	real ( kind = 8 ), intent(in) :: targinfo(ndt)
-	integer, intent(in) :: ipars(ndi)
-	real ( kind = 8 ), intent(in) :: dpars(ndd)
-	complex ( kind = 8 ), intent(in) :: zpars(ndz)
-	complex ( kind = 8 ), intent(out) :: E_val
-	
-	!List of local variables
-	real ( kind = 8 ) ru_s(3),rv_s(3),n_s(3)
-	real ( kind = 8 ) ru_t(3),rv_t(3),n_t(3)
-	real ( kind = 8 ) du(3), dv(3),sour(3),targ(7)
-	real ( kind = 8 ) r, dr(3),aux_real
-	complex ( kind = 8 ) curlSka(3,2),curlcurlSka(3,2)
-	real ( kind = 8 ) xprod_aux1(3),xprod_aux2(3),xprod_aux3(3),xprod_aux4(3)
-	complex ( kind = 8 ) R1,R2,ima,my_exp,omega	
-	complex ( kind = 8 ) mu,ep,zk
-	real ( kind = 8 ) pi
-	integer count1,count2
-	complex ( kind = 8 )  E_mat(6,4)
-
-	
-	pi=3.1415926535897932384626433832795028841971d0
-	ima=(0.0d0,1.0d0)
-	omega=zpars(1)
-	
-	sour(1)=srcinfo(1)
-	sour(2)=srcinfo(2)
-	sour(3)=srcinfo(3)
-	
-	n_s(1)=srcinfo(10)
-	n_s(2)=srcinfo(11)
-	n_s(3)=srcinfo(12)	
-
-	targ(1)=targinfo(1)
-	targ(2)=targinfo(2)
-	targ(3)=targinfo(3)
-
-  ep=targinfo(4)+ima*targinfo(5)
-  mu=targinfo(6)+ima*targinfo(7)
-
-	dr(1)=targ(1)-sour(1)
-	dr(2)=targ(2)-sour(2)
-	dr(3)=targ(3)-sour(3)
-
-	
-	r=sqrt((dr(1))**2+(dr(2))**2+(dr(3))**2)
-	zk=omega*sqrt(ep*mu)
-
-	R1=(ima*zk*r-1.0d0)/r**3*exp(ima*zk*r)/(4.0d0*pi)
-	R2=((ima*zk)**2/r**3-3.0d0*ima*zk/r**4+3.0d0/r**5)*exp(ima*zk*r)/&
-	 &(4.0d0*pi)
-	my_exp=exp(ima*zk*r)/(4.0d0*pi)
-	
-	call orthonormalize(srcinfo(4:6),n_s,ru_s,rv_s)
-
-	call get_curlSka(ru_s,rv_s,n_s,dr,R1,my_exp,r,curlSka)		
-	call get_curlcurlSka(ru_s,rv_s,n_s,dr,R1,R2,zk,&
-	 &my_exp,r,curlcurlSka)
-		
-		E_mat(1,1)=curlSka(1,1)
-    E_mat(2,1)=curlSka(2,1)
-		E_mat(3,1)=curlSka(3,1)
-
-		E_mat(1,2)=curlSka(1,2)
-    E_mat(2,2)=curlSka(2,2)
-		E_mat(3,2)=curlSka(3,2)
-
-		E_mat(1,3)=curlcurlSka(1,1)/(-ima*omega)
-		E_mat(2,3)=curlcurlSka(2,1)/(-ima*omega)
-		E_mat(3,3)=curlcurlSka(3,1)/(-ima*omega)
-
-		E_mat(1,4)=curlcurlSka(1,2)/(-ima*omega)
-		E_mat(2,4)=curlcurlSka(2,2)/(-ima*omega)
-		E_mat(3,4)=curlcurlSka(3,2)/(-ima*omega)
-
-
-!		E_mat(4,3)=ep*curlSka(1,1)
-!    E_mat(5,3)=ep*curlSka(2,1)
-!		E_mat(6,3)=ep*curlSka(3,1)
-
-!		E_mat(4,4)=ep*curlSka(1,2)
-!    E_mat(5,4)=ep*curlSka(2,2)
-!		E_mat(6,4)=ep*curlSka(3,2)
-
-!		E_mat(4,1)=curlcurlSka(1,1)/(ima*omega)
-!		E_mat(5,1)=curlcurlSka(2,1)/(ima*omega)
-!		E_mat(6,1)=curlcurlSka(3,1)/(ima*omega)
-
-!		E_mat(4,2)=curlcurlSka(1,2)/(ima*omega)
-!		E_mat(5,2)=curlcurlSka(2,2)/(ima*omega)
-!		E_mat(6,2)=curlcurlSka(3,2)/(ima*omega)
-
-
-	E_val=E_mat(ipars(1),ipars(2))
-
-
-return
-end subroutine fker_em_muller_far
 
 
 
@@ -3071,13 +2943,6 @@ implicit none
     endif
 
 
-!	curlcurlSka(1,1)=zk**2*ru_s(1)*my_exp/r+R1*ru_s(1)-dr(1)*DOT_PRODUCT(ru_s,-dr)*R2
-!	curlcurlSka(2,1)=zk**2*ru_s(2)*my_exp/r+R1*ru_s(2)-dr(2)*DOT_PRODUCT(ru_s,-dr)*R2
-!	curlcurlSka(3,1)=zk**2*ru_s(3)*my_exp/r+R1*ru_s(3)-dr(3)*DOT_PRODUCT(ru_s,-dr)*R2
-
-!	curlcurlSka(1,2)=zk**2*rv_s(1)*my_exp/r+R1*rv_s(1)-dr(1)*DOT_PRODUCT(rv_s,-dr)*R2
-!	curlcurlSka(2,2)=zk**2*rv_s(2)*my_exp/r+R1*rv_s(2)-dr(2)*DOT_PRODUCT(rv_s,-dr)*R2
-!	curlcurlSka(3,2)=zk**2*rv_s(3)*my_exp/r+R1*rv_s(3)-dr(3)*DOT_PRODUCT(rv_s,-dr)*R2
 
 return
 end subroutine em_muller_far
@@ -3307,9 +3172,9 @@ end subroutine get_curlcurlSka
       complex *16 sigma(4*npts),sigma2(npts)
       integer n_regions
       integer ntarg_vect(n_regions)
-	  
-      complex *16 wnear(12*nquad)
-	  
+  
+      complex *16 wnear(nquad,12)
+  
       integer novers(npatches+1)
       integer nover,npolso,nptso
       real *8 srcover(12,nptso),whtsover(nptso)
@@ -3340,7 +3205,7 @@ end subroutine get_curlcurlSka
       complex *16, allocatable :: ctmp2_a_u(:),ctmp2_a_v(:)
       complex *16, allocatable :: ctmp2_b_u(:),ctmp2_b_v(:)
 
-	    complex *16, allocatable :: pot_aux(:)
+      complex *16, allocatable :: pot_aux(:)
 
       real *8 radexp,epsfmm
 
@@ -3353,7 +3218,7 @@ end subroutine get_curlcurlSka
       real *8 rr,rmin
       integer nss,ii,l,npover
       complex *16 ima
-	    complex *16 omega,ep,mu
+      complex *16 omega,ep,mu
 
       integer nd,ntarg0
       integer icount
@@ -3365,7 +3230,7 @@ end subroutine get_curlcurlSka
       ns = nptso
       done = 1
       pi = atan(done)*4
-	    ima=(0.0d0,1.0d0)
+      ima=(0.0d0,1.0d0)
 
            
       ifpgh = 0
@@ -3438,62 +3303,46 @@ end subroutine get_curlcurlSka
           jstart = ixyzs(jpatch) 
           do l=1,npols
 
-              E_far(1,i) = E_far(1,i) + mu*wnear(jquadstart+l-1)*sigma(jstart+l-1)
-              E_far(2,i) = E_far(2,i) + mu*wnear(4*nquad+jquadstart+l-1)*sigma(jstart+l-1)
-              E_far(3,i) = E_far(3,i) + mu*wnear(8*nquad+jquadstart+l-1)*sigma(jstart+l-1)
+              E_far(1,i) = E_far(1,i) + mu*wnear(jquadstart+l-1,1)*sigma(jstart+l-1)
+              E_far(2,i) = E_far(2,i) + mu*wnear(jquadstart+l-1,5)*sigma(jstart+l-1)
+              E_far(3,i) = E_far(3,i) + mu*wnear(jquadstart+l-1,9)*sigma(jstart+l-1)
 
-              E_far(1,i) = E_far(1,i) + mu*wnear(nquad+jquadstart+l-1)*sigma(jstart+l-1+npts)
-              E_far(2,i) = E_far(2,i) + mu*wnear(5*nquad+jquadstart+l-1)*sigma(jstart+l-1+npts)
-              E_far(3,i) = E_far(3,i) + mu*wnear(9*nquad+jquadstart+l-1)*sigma(jstart+l-1+npts)
+              E_far(1,i) = E_far(1,i) + mu*wnear(jquadstart+l-1,2)*sigma(jstart+l-1+npts)
+              E_far(2,i) = E_far(2,i) + mu*wnear(jquadstart+l-1,6)*sigma(jstart+l-1+npts)
+              E_far(3,i) = E_far(3,i) + mu*wnear(jquadstart+l-1,10)*sigma(jstart+l-1+npts)
 
 
-              H_far(1,i) = H_far(1,i) + ep*wnear(jquadstart+l-1)*sigma(jstart+l-1+2*npts)
-              H_far(2,i) = H_far(2,i) + ep*wnear(4*nquad+jquadstart+l-1)*sigma(jstart+l-1+2*npts)
-              H_far(3,i) = H_far(3,i) + ep*wnear(8*nquad+jquadstart+l-1)*sigma(jstart+l-1+2*npts)
+              H_far(1,i) = H_far(1,i) + ep*wnear(jquadstart+l-1,1)*sigma(jstart+l-1+2*npts)
+              H_far(2,i) = H_far(2,i) + ep*wnear(jquadstart+l-1,5)*sigma(jstart+l-1+2*npts)
+              H_far(3,i) = H_far(3,i) + ep*wnear(jquadstart+l-1,9)*sigma(jstart+l-1+2*npts)
 
-              H_far(1,i) = H_far(1,i) + ep*wnear(nquad+jquadstart+l-1)*sigma(jstart+l-1+3*npts)
-              H_far(2,i) = H_far(2,i) + ep*wnear(5*nquad+jquadstart+l-1)*sigma(jstart+l-1+3*npts)
-              H_far(3,i) = H_far(3,i) + ep*wnear(9*nquad+jquadstart+l-1)*sigma(jstart+l-1+3*npts)
+              H_far(1,i) = H_far(1,i) + ep*wnear(jquadstart+l-1,2)*sigma(jstart+l-1+3*npts)
+              H_far(2,i) = H_far(2,i) + ep*wnear(jquadstart+l-1,6)*sigma(jstart+l-1+3*npts)
+              H_far(3,i) = H_far(3,i) + ep*wnear(jquadstart+l-1,10)*sigma(jstart+l-1+3*npts)
 
-              E_far(1,i) = E_far(1,i) + wnear(2*nquad+jquadstart+l-1)*sigma(jstart+l-1+2*npts)
-              E_far(2,i) = E_far(2,i) + wnear(6*nquad+jquadstart+l-1)*sigma(jstart+l-1+2*npts)
-              E_far(3,i) = E_far(3,i) + wnear(10*nquad+jquadstart+l-1)*sigma(jstart+l-1+2*npts)
+              E_far(1,i) = E_far(1,i) + wnear(jquadstart+l-1,3)*sigma(jstart+l-1+2*npts)
+              E_far(2,i) = E_far(2,i) + wnear(jquadstart+l-1,7)*sigma(jstart+l-1+2*npts)
+              E_far(3,i) = E_far(3,i) + wnear(jquadstart+l-1,11)*sigma(jstart+l-1+2*npts)
 
-              E_far(1,i) = E_far(1,i) + wnear(3*nquad+jquadstart+l-1)*sigma(jstart+l-1+3*npts)
-              E_far(2,i) = E_far(2,i) + wnear(7*nquad+jquadstart+l-1)*sigma(jstart+l-1+3*npts)
-              E_far(3,i) = E_far(3,i) + wnear(11*nquad+jquadstart+l-1)*sigma(jstart+l-1+3*npts)
+              E_far(1,i) = E_far(1,i) + wnear(jquadstart+l-1,4)*sigma(jstart+l-1+3*npts)
+              E_far(2,i) = E_far(2,i) + wnear(jquadstart+l-1,8)*sigma(jstart+l-1+3*npts)
+              E_far(3,i) = E_far(3,i) + wnear(jquadstart+l-1,12)*sigma(jstart+l-1+3*npts)
 
-              H_far(1,i) = H_far(1,i) - wnear(2*nquad+jquadstart+l-1)*sigma(jstart+l-1)
-              H_far(2,i) = H_far(2,i) - wnear(6*nquad+jquadstart+l-1)*sigma(jstart+l-1)
-              H_far(3,i) = H_far(3,i) - wnear(10*nquad+jquadstart+l-1)*sigma(jstart+l-1)
+              H_far(1,i) = H_far(1,i) - wnear(jquadstart+l-1,3)*sigma(jstart+l-1)
+              H_far(2,i) = H_far(2,i) - wnear(jquadstart+l-1,7)*sigma(jstart+l-1)
+              H_far(3,i) = H_far(3,i) - wnear(jquadstart+l-1,11)*sigma(jstart+l-1)
 
-              H_far(1,i) = H_far(1,i) - wnear(3*nquad+jquadstart+l-1)*sigma(jstart+l-1+npts)
-              H_far(2,i) = H_far(2,i) - wnear(7*nquad+jquadstart+l-1)*sigma(jstart+l-1+npts)
-              H_far(3,i) = H_far(3,i) - wnear(11*nquad+jquadstart+l-1)*sigma(jstart+l-1+npts)
+              H_far(1,i) = H_far(1,i) - wnear(jquadstart+l-1,4)*sigma(jstart+l-1+npts)
+              H_far(2,i) = H_far(2,i) - wnear(jquadstart+l-1,8)*sigma(jstart+l-1+npts)
+              H_far(3,i) = H_far(3,i) - wnear(jquadstart+l-1,12)*sigma(jstart+l-1+npts)
 
-		        !do count1=0,2
-			      ! do count2=0,3
-            !  E_far(count1+1,i) = E_far(count1+1,i) + &
-				    !   &wnear((count1*4+count2)*nquad+jquadstart+l-1)*&
-				    !   &sigma(jstart+l-1+npts*count2)
-            !  H_far(count1+1,i) = H_far(count1+1,i) + &
-				    !   &wnear((count1*4+count2+12)*nquad+jquadstart+l-1)*&
-				    !   &sigma(jstart+l-1+npts*count2)
-			      ! enddo
-			      !enddo
 
           enddo
         enddo
       enddo
 
-!C$OMP END PARALLEL DO
-!C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
-!C$OMP$PRIVATE(ctmp2_u,ctmp2_v,wtmp2,nss,l,jstart,ii,E,npover)
-!		ipars(1)=1
-!		ipars(2)=1
-	ifdir=1
-!      do i=1,ntarg
-i=0
+      ifdir=1
+      i=0
       do count1=1,n_regions
        zpars_aux(1)=zpars(1)
        zpars_aux(2)=targs(4,i+1)+ima*targs(5,i+1)
@@ -3543,8 +3392,8 @@ i=0
        enddo
       enddo
 
-	  
-	  return
+  
+    return
     end subroutine lpcomp_em_muller_far_addsub
 
 
@@ -3697,7 +3546,8 @@ end subroutine em_muller_far_FMM
 
 subroutine test_accuracy_em_muller(npatches,norders,ixyzs,iptype,npts,srccoefs,&
     &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
-    &contrast_matrix,exposed_surfaces,eps,zpars,sigma,P0,vf,direction, Pol,nx,ny)
+    &contrast_matrix,exposed_surfaces,eps,zpars,sigma,P0,vf,direction, &
+    &Pol,nx,ny,erre,errh)
 implicit none
 
  !List of calling arguments
@@ -3722,6 +3572,7 @@ implicit none
  complex ( kind = 8 ) ep0,mu0,ep,mu
  complex ( kind = 8 ), allocatable :: E_far(:,:), H_far(:,:),E_0(:,:), H_0(:,:)
  complex ( kind = 8 ), allocatable :: E_far_aux(:,:),H_far_aux(:,:)
+ real *8 erre,errh,re,rh
  character (len=100) nombre_plot
  integer ( kind = 8 ) M_plot,N_plot
 
@@ -3775,7 +3626,6 @@ implicit none
    enddo
   if (icount2>0) then
     n_regions=n_regions+1
-!    ntarg_vect(count1+1)=icount2
     ntarg_vect(n_regions) = icount2
   endif
  enddo
@@ -3785,27 +3635,23 @@ implicit none
    uvs_targ(1,count1) = 0
    uvs_targ(2,count1) = 0
  enddo
-! do count1=1,ntarg
-!   write (*,*) 'targ_sort: ',count1,targ_sort(:,count1)
-! enddo
-!  do count1=1,ntarg
-!   write (*,*) 'targ: ',count1,targ(:,count1)
-!  enddo
 
  call lpcomp_em_muller_far_dir(npatches,norders,ixyzs,&
   &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targ_sort,&
-  &ipatch_id,uvs_targ,eps,zpars,sigma,E_far_aux,H_far_aux,n_regions,ntarg_vect)
+  &ipatch_id,uvs_targ,eps,zpars,sigma,E_far_aux,H_far_aux,&
+  n_regions,ntarg_vect)
  
  do count1=1,ntarg
    E_far(:,count1)=E_far_aux(:,permutation_targs(count1))
    H_far(:,count1)=H_far_aux(:,permutation_targs(count1))   
  enddo
+
  E_0 = 0
  H_0 = 0
+ erre = 0
+ re = 0
  do count1=1,ntarg
   if (location_targs(count1).eq.0) then
-!    write (*,*) 'datum dipoles: ', zpars(1),ep0,mu0,P0,targ(1:3,count1),vf
-!    read (*,*)
     call fieldsEDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
      &E_0(:,count1),H_0(:,count1),vf,0)
     call fieldsMDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
@@ -3825,53 +3671,133 @@ implicit none
      &abs(H_0(2,count1)-H_far(2,count1))**2+abs(H_0(3,count1)-H_far(3,count1))**2)
     error_rel_H(count1)=error_H(count1)/sqrt(abs(H_0(1,count1))**2+&
      &abs(H_0(2,count1))**2+abs(H_0(3,count1))**2)
+    erre = erre + error_E(count1)**2
+    errh = errh + error_H(count1)**2
+    re = re + abs(E_0(1,count1))**2 + abs(E_0(2,count1))**2 +  &
+      abs(E_0(3,count1))**2
+    rh = rh + abs(H_0(1,count1))**2 + abs(H_0(2,count1))**2 +  &
+      abs(H_0(3,count1))**2
  enddo
 
-      call prin2('E_0=*',E_0,6*ntarg)
-      call prin2('E_far=*',E_far,6*ntarg)
-      call prin2('H_0=*',H_0,6*ntarg)
-      call prin2('H_far=*',H_far,6*ntarg)
-      write (*,*) 'Relative Error in E: ', error_rel_E
-      write (*,*) 'Relative Error in H: ', error_rel_H
+ call prin2('E_0=*',E_0,24)
+ call prin2('H_0=*',H_0,24)
 
-      write (*,*) 'Relative Error in E (maxval): ', maxval(error_rel_E)
-      write (*,*) 'Relative Error in H (maxval): ', maxval(error_rel_H)
-
-! do count1=1,ntarg
-!   write (*,*) 'targ : ',count1,targ(:,count1)
-!   write (*,*) 'E_far: ',count1,E_far(:,count1)
-!   write (*,*) 'E_0  : ',count1,E_0(:,count1)
-!   write (*,*) ' '
-! enddo
-! write (*,*) ' '
-! do count1=1,ntarg
-!   write (*,*) 'targ : ',count1,targ(:,count1)
-!   write (*,*) 'H_far: ',count1,H_far(:,count1)
-!   write (*,*) 'H_0  : ',count1,H_0(:,count1)
-!   write (*,*) ' '
-! enddo
-
- nombre_plot='plot_err_E_fortran.txt'
- M_plot=int(nx,8)
- N_plot=int(ny,8)
- call plot2D(targ(1,:),targ(2,:),error_rel_E,M_plot,N_plot,nombre_plot)
-
- nombre_plot='plot_err_H_fortran.txt'
- call plot2D(targ(1,:),targ(2,:),error_rel_H,M_plot,N_plot,nombre_plot)
-
- nombre_plot='plot_E_fortran.txt'
- call plot2D(targ(1,:),targ(2,:),real(E_far(3,:)),M_plot,N_plot,nombre_plot)
-
- nombre_plot='plot_E0_fortran.txt'
- call plot2D(targ(1,:),targ(2,:),real(E_0(3,:)),M_plot,N_plot,nombre_plot)
-
- nombre_plot='plot_H_fortran.txt'
- call plot2D(targ(1,:),targ(2,:),real(H_far(3,:)),M_plot,N_plot,nombre_plot)
-
- nombre_plot='plot_H0_fortran.txt'
- call plot2D(targ(1,:),targ(2,:),real(H_0(3,:)),M_plot,N_plot,nombre_plot)
+ erre = sqrt(erre/re)
+ errh = sqrt(errh/rh)
+ call prin2('erre=*',erre,1)
+ call prin2('errh=*',errh,1)
 
 
 return
 end subroutine test_accuracy_em_muller
+!
+!
+!
+!
+!
+subroutine evaluate_field_muller_exact(npatches,norders, &
+    ixyzs,iptype,npts,srccoefs,&
+    &srcvals,wts,targ,ntarg,npatches_vect,n_components, &
+    sorted_vector,&
+    &contrast_matrix,exposed_surfaces,eps,zpars,P0,vf,direction, &
+    &Pol,E_0,H_0)
+implicit none
+
+ !List of calling arguments
+ integer, intent(in) :: npatches,npts,n_components,ntarg
+ integer, intent(in) :: norders(npatches),npatches_vect(n_components)
+ integer, intent(in) :: ixyzs(npatches+1),iptype(npatches)
+ real ( kind = 8 ), intent(in) :: srcvals(12,npts), srccoefs(9,npts)
+ real ( kind = 8 ), intent(in) :: targ(3,ntarg),wts(npts)
+ integer, intent(in) :: sorted_vector(n_components+1)
+ complex ( kind = 8 ), intent(in) :: contrast_matrix(4,n_components),zpars(1)
+ logical *8 exposed_surfaces(n_components)
+ real ( kind = 8 ), intent(in) :: eps
+ real ( kind = 8 ), intent(in) :: P0(3), direction(2)
+ complex ( kind = 8 ), intent(in) :: vf(3),Pol(2)
+ complex ( kind = 8 ), intent(out) :: E_0(3,ntarg),H_0(3,ntarg)
+
+ !List of local variables
+ integer count1,count2,icount,icount2,n_aux,i1,i2,j1,j2,npatches_aux,npts_aux,x,ntarg_vect(n_components+1)
+ integer ndtarg,n_regions
+ integer, allocatable :: location_targs(:),permutation_targs(:)
+ integer, allocatable :: ipatch_id(:)
+ real *8, allocatable :: uvs_targ(:,:)
+
+ real *8, allocatable :: targ_sort(:,:),error_E(:),error_H(:),error_rel_E(:),error_rel_H(:)
+ complex ( kind = 8 ) ep0,mu0,ep,mu
+
+
+ allocate(location_targs(ntarg),permutation_targs(ntarg))
+ allocate(ipatch_id(ntarg))
+ allocate(uvs_targ(2,ntarg))
+ allocate(targ_sort(7,ntarg))
+
+  do count1=1,n_components+1
+    ntarg_vect(count1)=0
+  enddo
+
+  call find_inclusion_vect(npatches,norders,ixyzs,iptype,npts,srccoefs,&
+    &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
+    &location_targs,eps)
+  do count1=1,n_components
+    if (exposed_surfaces(count1)) then
+       ep0=contrast_matrix(1,count1)
+       mu0=contrast_matrix(2,count1)
+       exit
+    endif
+  enddo
+ icount=1
+ n_regions=0
+ do count1=0,n_components
+   icount2=0
+   do count2=1,ntarg
+    if (location_targs(count2).eq.count1) then
+      permutation_targs(count2)=icount
+      targ_sort(1:3,icount)=targ(:,count2)
+      if (count1.eq.0) then
+        targ_sort(4,icount)=real(ep0)
+        targ_sort(5,icount)=aimag(ep0)
+        targ_sort(6,icount)=real(mu0)
+        targ_sort(7,icount)=aimag(mu0)
+      else
+        targ_sort(4,icount)=real(contrast_matrix(3,count1))
+        targ_sort(5,icount)=aimag(contrast_matrix(3,count1))
+        targ_sort(6,icount)=real(contrast_matrix(4,count1))
+        targ_sort(7,icount)=aimag(contrast_matrix(4,count1))
+      endif
+      icount=icount+1
+      icount2=icount2+1
+    endif
+   enddo
+  if (icount2>0) then
+    n_regions=n_regions+1
+    ntarg_vect(n_regions) = icount2
+  endif
+ enddo
+ ndtarg=7
+ do count1=1,ntarg
+   ipatch_id(count1) = -1
+   uvs_targ(1,count1) = 0
+   uvs_targ(2,count1) = 0
+ enddo
+
+ E_0 = 0
+ H_0 = 0
+ do count1=1,ntarg
+  if (location_targs(count1).eq.0) then
+    call fieldsEDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
+     &E_0(:,count1),H_0(:,count1),vf,0)
+    call fieldsMDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
+     &E_0(:,count1),H_0(:,count1),vf,1)
+  else
+    ep=contrast_matrix(3,location_targs(count1))
+    mu=contrast_matrix(4,location_targs(count1))
+    call fieldsPWomega(zpars(1),ep,mu,targ(1:3,count1),1,&
+     &E_0(:,count1),H_0(:,count1),direction,Pol)
+  endif
+ enddo
+
+return
+end subroutine evaluate_field_muller_exact 
 

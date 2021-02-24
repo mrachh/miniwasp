@@ -1,0 +1,4 @@
+*.o
+int2*
+fort.*
+*.txt

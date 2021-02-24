@@ -209,7 +209,7 @@
 !     READ***
 !     zk = omega*sqrt(epsilon*mu)  -> 2*pi/lambda_0
       omega=1.12d2*1.6d0/2
-      omega=1.12d0
+      omega=1.12d-2
 
 
       zpars(1) = omega
@@ -273,9 +273,9 @@
 ! orientation of the electric and magnetic dipoles used to create the solution in the 
 ! exterior region and test the accuracy
 
-      vf(1)=1.0d-3
-      vf(2)=2.0d-3
-      vf(3)=3.0d-3
+      vf(1)=1.0d0
+      vf(2)=2.0d0
+      vf(3)=3.0d0
 
 !
 ! Plane wave parameters
@@ -312,7 +312,7 @@
 !
 !	Specify
 !
-!      goto 2111
+      !goto 2111
       call cpu_time(t1)
 !C$      t1 = omp_get_wtime()    
       call em_muller_trans_v2_solver(npatches,norders,ixyzs,iptype,npts,&
@@ -366,16 +366,16 @@
       y_min=y_min-dy/10.0d0
       z_min=z_min-dz/10.0d0
 
-      x_max=x_max+dx/10.0d0
-      y_max=y_max+dy/10.0d0
-      z_max=z_max+dz/10.0d0
+      x_max=x_max+dx/10.0d0/sqrt(pi)
+      y_max=y_max+dy/10.0d0/sqrt(pi)
+      z_max=z_max+dz/10.0d0/sqrt(pi)
 
       write (*,*) 'x_min,x_max,y_min,y_max,z_min,z_max',x_min,x_max,y_min,y_max,z_min,z_max
 
 ! this is for a volume equispaced sampling
 !      nx=8
 !      ny=8
-!      nz=8
+!      nz=/sqrt(pi08
 !      ntarg=nx*ny*nz
 !      allocate(targs(3,ntarg))
 !      allocate(location_targs(ntargs))
@@ -413,15 +413,15 @@
        enddo
       enddo
 
-      nx = 2
-      ntarg = 1
-      
-      targs(1,1) = xa
-      targs(2,1) = ya
-      targs(3,1) = za
-      targs(1,2) = srcvals(1,1) + 0.1*srcvals(10,1)
-      targs(2,2) = srcvals(2,1) + 0.1*srcvals(11,1)
-      targs(3,2) = srcvals(3,1) + 0.1*srcvals(12,1)
+!      nx = 2
+!      ntarg = 1
+!      
+!      targs(1,1) = xa
+!      targs(2,1) = ya
+!      targs(3,1) = za
+!      targs(1,2) = srcvals(1,1) + 0.1*srcvals(10,1)
+!      targs(2,2) = srcvals(2,1) + 0.1*srcvals(11,1)
+!      targs(3,2) = srcvals(3,1) + 0.1*srcvals(12,1)
 !      call prin2('srcvals=*',srcvals(1:3,1:6),18)
 !      call prin2('targs=*',targs,3)
 
@@ -454,7 +454,7 @@
 
      call test_accuracy_em_muller(npatches,norders,ixyzs,iptype,npts,srccoefs,&
     &srcvals,wts,targs,ntarg,npatches_vect,n_components,sorted_vector,&
-    &contrast_matrix,exposed_surfaces,eps,zpars,sigma,xyz_in,vf,direction,Pol,nx,ny)
+    &contrast_matrix,exposed_surfaces,eps,zpars,sigma,xyz_in,vf,direction,Pol,nx,ny,erre,errh)
 
       stop
       end

@@ -11,7 +11,7 @@
       complex *16, allocatable :: sigma2(:),rhs2(:)
       real *8, allocatable :: errs(:)
       real *8 thet,phi,eps_gmres
-      complex * 16 zpars(3)
+      complex * 16 zpars(3),zk
       integer numit,niter
       character *100 title,fname
 
@@ -34,21 +34,21 @@ c
 c   set wavelength
 c
 c
-      rlam = 1.1d0
+      rlam = 10.0d0
 
 c
 c   define scaling parameter to rescale geometry. 
 c
 
-      rsc = 1.0d-2
+      rsc = 1.0d0
 c
 c
 c   select geometry to test
 c    icase=1, lens
 c    icase=2, rhabdom
-c    icase=3, cone 
+c    icase=3, cone
 c
-      icase = 1
+      icase = 3
 c
 c   test interior or exterior problem
 c    ifinout = 0, interior problem
@@ -104,8 +104,8 @@ c
 
         zpars(1) = zk
         call prin2('zk=*',zk,2)
-        if(ifinout.eq.0) zpars(2) = rlam*ima
-        if(ifinout.eq.1) zpars(2) = -rlam*ima
+        if(ifinout.eq.0) zpars(2) = zk*ima
+        if(ifinout.eq.1) zpars(2) = -zk*ima
         zpars(3) = 1.0d0
 
 c
@@ -163,8 +163,8 @@ c
         niter = 0
         allocate(errs(numit+1))
 
-        eps = 0.51d-6
-        eps_gmres = eps
+        eps = 0.51d-3
+        eps_gmres = 0.51d-6
 
         call helm_comb_dir_solver(npatches,norders,ixyzs,iptype,npts,
      1    srccoefs,srcvals,eps,zpars,numit,ifinout,rhs,eps_gmres,
