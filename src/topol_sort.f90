@@ -491,6 +491,7 @@ implicit none
  dpars(1)=0.0d0
  dpars(2)=1.0d0
 
+
  i1=1
  n_aux=0
  do count1=1,n_components
@@ -500,6 +501,7 @@ implicit none
   i2=n_aux
   sigma(ixyzs(i1):(ixyzs(i2+1)-1))=-1.0d0*2.0d0**(count1-1)
  enddo
+
 !
 !  This is the double layer evaluator, for a 2D version you should
 !  replace that part
@@ -1030,7 +1032,6 @@ subroutine lpcomp_lap_comb_dir_addsub_nonfmm(npatches,norders,ixyzs,&
 !
       
       call get_fmm_thresh(3,ns,sources,3,ntarg,targvals,thresh)
-      print *, "thresh=",thresh
       
 
       do count1=1,ntarg

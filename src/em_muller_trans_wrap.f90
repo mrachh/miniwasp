@@ -146,7 +146,6 @@
           j1=j2+1
           j2=j1+npatches_vect(i)-1
         endif
-        call prin2('dP=*',dP,4)
         call open_gov3_geometry_v2(fname1,npatches_vect(i), &
           norders(j1:j2),ixyzs(j1:j2+1),iptype(j1:j2), &
           npts_vect(i),srcvals(:,i1:i2),srccoefs(:,i1:i2), &
@@ -159,7 +158,6 @@
         n_aux=ixyzs(j2+1)
       enddo
 
-      call prin2('eps=*',eps,1)
       
       call topological_sorting(npatches,norders,ixyzs,iptype, &
        npts,srccoefs,srcvals,wts,npatches_vect,n_components, &
@@ -296,7 +294,7 @@
       done = 1
       pi = atan(done)*4
 
-      call em_solver_wrap_mem(string0,n_components,npatches,npts)
+      call em_solver_wrap_mem(string0,n_components,npatches,npts0)
 
       allocate(npatches_vect(n_components),npts_vect(n_components))
       allocate(sorted_vector(n_components+1))
@@ -328,7 +326,6 @@
       omega_use = omega/rsc
       zpars(1) = omega_use
 
-      call prin2('omega_use=*',omega_use,2)
 
       allocate(rhs(4*npts))
 
@@ -391,8 +388,6 @@
         soln(i) = 0
       enddo
 
-      call prin2('eps=*',eps,1)
-      call prinf('numit=*',numit,1)
 
       call cpu_time(t1)
 !C$      t1 = omp_get_wtime()    
@@ -400,8 +395,6 @@
         npts,srccoefs,srcvals,eps,zpars,numit,ifinout,rhs,eps_gmres, &
         niter,errs,rres,soln,contrast_matrix,npts_vect, &
         n_components,srcvals_extended)
-      call prin2('soln=*',soln,24)
-
       call prinf('niter=*',niter,1)
       call prin2('rres=*',rres,1)
       call prin2('errs=*',errs,niter)
@@ -456,18 +449,12 @@
        enddo
       enddo
 
-
-      erre = 0
-      errh = 0
-
+      err_est = 0
       call test_accuracy_em_muller(npatches,norders,ixyzs, &
         iptype,npts,srccoefs,srcvals,wts,targs,ntarg,npatches_vect, &
         n_components,sorted_vector,contrast_matrix, &
         exposed_surfaces,eps,zpars,soln,xyz_in,vf, &
-        direction,Pol,nx,ny,erre,errh)
-      call prin2('error in e field=*',erre,1)
-      call prin2('error in h field=*',errh,1)
-      err_est = max(erre,errh)
+        direction,Pol,err_est)
       
 
       return
@@ -580,7 +567,7 @@
 
       done = 1
       pi = atan(done)*4
-      call em_solver_wrap_mem(string0,n_components,npatches,npts)
+      call em_solver_wrap_mem(string0,n_components,npatches,npts0)
 
       allocate(npatches_vect(n_components),npts_vect(n_components))
       allocate(sorted_vector(n_components+1))
@@ -621,13 +608,8 @@
 
       zpars(1) = omega_use
 
-      call prin2('omega_use=*',omega_use,2)
-      call prin2('zpars=*',zpars,2)
-      call prin2('targ0=*',targ0,24)
-
-
-      call evaluate_field_muller(npatches,norders,ixyzs,npts, &
-        srccoefs,srcvals,wts,targ0,ntarg,npatches,npatches_vect, &
+      call evaluate_field_muller(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,wts,targ0,ntarg,npatches_vect, &
         n_components,sorted_vector,contrast_matrix,exposed_surfaces, &
         eps,zpars,soln,E,H)
 
@@ -735,6 +717,7 @@
       character *2000 string1
       
       real *8, allocatable :: srcvals_extended(:,:)
+      real *8, allocatable :: targ0(:,:)
 
       logical *8, allocatable :: exposed_surfaces(:)
 
@@ -748,64 +731,19 @@
       done = 1
       pi = atan(done)*4
 
+      call em_solver_wrap_mem(string0,n_components,npatches,npts0)
       allocate(npatches_vect(n_components),npts_vect(n_components))
-      allocate(iwords(n_components+1))
       allocate(sorted_vector(n_components+1))
       allocate(exposed_surfaces(n_components))
-
-      ll = len(string0)
-      string1(1:ll) = string0
-      call text_process(string1,n_components,iwords)
-
-      npatches=0
-!
-!  estimate number of points and patches on each component
-!  
-
-      do i=1,n_components
-        fname1=trim(string1(iwords(i)+1:iwords(i+1)-1))
-        n0 = 0
-        call open_gov3_geometry_mem(fname1,npatches_vect(i), &
-          npts_vect(i))
-        npatches=npatches+npatches_vect(i)
-      enddo
-      call prinf('npatches=*',npatches,1)
-      call prinf('npts_vect=*',npts_vect,n_components)
-!
-!  compute source discretization
-!  
-!
       allocate(srcvals_extended(20,npts))
       allocate(srcvals(12,npts),srccoefs(9,npts))
       allocate(ixyzs(npatches+1),iptype(npatches),norders(npatches))
       allocate(wts(npts))
 
+      call em_solver_open_geom(string0,n_components,dP, &
+        npatches,npts,eps,npatches_vect,npts_vect,norders,ixyzs,iptype, &
+        srcvals,srccoefs,wts,sorted_vector,exposed_surfaces)
 
-      do i=1,n_components
-        fname1=trim(string1(iwords(i)+1:iwords(i+1)-1))
-        if (i.eq.1) then
-          i1=1
-          i2=npts_vect(1)
-          j1=1
-          j2=npatches_vect(1)
-        else
-          i1=i2+1
-          i2=i1+npts_vect(i)-1
-          j1=j2+1
-          j2=j1+npatches_vect(i)-1
-        endif
-        call prin2('dP=*',dP,4)
-        call open_gov3_geometry_v2(fname1,npatches_vect(i), &
-          norders(j1:j2),ixyzs(j1:j2+1),iptype(j1:j2), &
-          npts_vect(i),srcvals(:,i1:i2),srccoefs(:,i1:i2), &
-          wts(i1:i2),dP(1,i))
-        if (i.ge.2) then
-          do count2=j1,j2+1
-            ixyzs(count2)=ixyzs(count2)+n_aux-1
-          enddo
-        endif
-        n_aux=ixyzs(j2+1)
-      enddo
       nt = 0
       call get_bsize(12,npts,srcvals,3,nt,tmp,bsize)
 
@@ -819,18 +757,19 @@
         wts(i) = wts(i)*rsc**2
       enddo
 
+      allocate(targ0(3,ntarg))
+
+      do i=1,ntarg
+        targ0(1,i) = targs(1,i)*rsc
+        targ0(2,i) = targs(2,i)*rsc
+        targ0(3,i) = targs(3,i)*rsc
+      enddo
+
       omega_use = omega/rsc
 
       zpars(1) = omega_use
 
-      call prin2('omega_use=*',omega_use,2)
 
-!
-! Obtain ordering of components which obeys partial ordering of inclusion
-!
-      call topological_sorting(npatches,norders,ixyzs,iptype, &
-       npts,srccoefs,srcvals,wts,npatches_vect,n_components, &
-       sorted_vector,exposed_surfaces,eps)
       
 !
 ! Compute centroid of points on first component
@@ -859,8 +798,8 @@
       vf(3)=3.0d0*1.0d-3
 
       
-      call evaluate_field_muller_exact(npatches,norders,ixyzs,npts, &
-        srccoefs,srcvals,wts,targs,ntarg,npatches,npatches_vect, &
+      call evaluate_field_muller_exact(npatches,norders,ixyzs,iptype, &
+        npts,srccoefs,srcvals,wts,targ0,ntarg,npatches_vect, &
         n_components,sorted_vector,contrast_matrix,exposed_surfaces, &
         eps,zpars,xyz_in,vf,direction,pol,E,H)
 

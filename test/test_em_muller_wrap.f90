@@ -6,10 +6,11 @@
       real *8, allocatable :: dP(:,:)
       real *8 direction(2),omega,eps,eps_gmres
       real *8, allocatable :: targs(:,:)
-      complex *16, allocatable :: E(:,:),H(:,:),Eex(:,:),Hex(:,:)
+      complex *16, allocatable :: E(:,:),H(:,:),E_ex(:,:),H_ex(:,:)
       integer, allocatable :: npatches_vect(:),npts_vect(:)
       integer, allocatable :: norders(:),ixyzs(:),iptype(:)
       real *8, allocatable :: srcvals(:,:),srccoefs(:,:),wts(:)
+      real *8, allocatable :: cms(:,:),rads(:)
       integer, allocatable :: sorted_vector(:)
       logical *8, allocatable :: exposed_surfaces(:)
       complex *16 pol(2)
@@ -34,13 +35,12 @@
       dP(4,1) = 1.1d0
 
 !      string1 = '../geometries/simplest_cube_quadratic_v4_o08_r02.go3?'
-      string1 = '../geometries/lens_r00.go3?'
+      string1 = '../geometries/lens_r01.go3?'
 
 !       estimate number of discretization points      
       call em_solver_wrap_mem(string1,n_components,npatches,npts)
-      call prinf('npts=*',npts,1)
 
-      omega = 2.0d0*pi/1200
+      omega = 2.0d0*pi/3600
       icase = 1
       eps = 0.51d-3
       eps_gmres = 0.51d-6
@@ -56,7 +56,6 @@
       call em_solver_wrap(string1,n_components,dP,contrast_matrix,npts,&
         omega,icase,direction,pol,eps,eps_gmres,soln,err_est)
       call prin2('estimated error=*',err_est,1)
-      stop
 !
 !  Now do the same computation using the postprocessing routine
 !  and getting the analytic solution
@@ -72,6 +71,8 @@
       call em_solver_open_geom(string1,n_components,dP, &
         npatches,npts,eps,npatches_vect,npts_vect,norders,ixyzs,iptype, &
         srcvals,srccoefs,wts,sorted_vector,exposed_surfaces)
+      
+
 
 !
 !  Compute extremes of bounding box
@@ -105,7 +106,7 @@
       ntarg=nx*ny*nz
       allocate(targs(3,ntarg))
 
-      allocate(E(3,ntarg),H(3,ntarg))
+      allocate(E(3,ntarg),H(3,ntarg),E_ex(3,ntarg),H_ex(3,ntarg))
 
       icount=1
       do count1=1,nx
@@ -125,13 +126,37 @@
         H(1,i) = 0
         H(2,i) = 0
         H(3,i) = 0
+
+        E_ex(1,i) = 0
+        E_ex(2,i) = 0
+        E_ex(3,i) = 0
+
+        H_ex(1,i) = 0
+        H_ex(2,i) = 0
+        H_ex(3,i) = 0
       enddo
-      call prin2('targs=*',targs,24)
-      soln = 1
 
       call em_solver_wrap_postproc(string1,n_components,dP, &
         contrast_matrix,npts,omega,eps,soln,ntarg,targs,E,H)
 
+
+      call em_sol_exact(string1,n_components,dP, &
+        contrast_matrix,npts,omega,eps,direction,pol,ntarg,targs, &
+        E_ex,H_ex)
+
+      erra = 0
+      ra = 0
+      do i=1,ntarg
+        do j=1,3
+          erra = erra + abs(E(j,i)-E_ex(j,i))**2
+          erra = erra + abs(H(j,i)-H_ex(j,i))**2
+          ra = ra + abs(E_ex(j,i))**2
+          ra = ra + abs(H_ex(j,i))**2
+        enddo
+      enddo
+
+      erra = sqrt(erra/ra)
+      call prin2('error in E and H fields=*',erra,1)
 
 
       stop

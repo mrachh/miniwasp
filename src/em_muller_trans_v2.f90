@@ -2246,9 +2246,10 @@ end subroutine open_gov3_geometry_v2
 !
 !
 !
-subroutine evaluate_field_muller(npatches,norders,ixyzs,iptype,npts,srccoefs,&
-    &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
-    &contrast_matrix,exposed_surfaces,eps,zpars,sigma,E_far,H_far)
+subroutine evaluate_field_muller(npatches,norders,ixyzs,iptype, &
+     npts,srccoefs,srcvals,wts,targ,ntarg,npatches_vect, &
+     n_components,sorted_vector,contrast_matrix,exposed_surfaces, &
+     eps,zpars,sigma,E_far,H_far)
 implicit none
 
 !
@@ -2381,7 +2382,6 @@ implicit none
   call find_inclusion_vect(npatches,norders,ixyzs,iptype,npts,srccoefs,&
     &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
     &location_targs,eps)
-  stop
   do count1=1,n_components
     if (exposed_surfaces(count1)) then
        ep0=contrast_matrix(1,count1)
@@ -2424,16 +2424,12 @@ implicit none
    uvs_targ(1,count1) = 0
    uvs_targ(2,count1) = 0
  enddo
-! do count1=1,ntarg
-!   write (*,*) 'targ_sort: ',count1,targ_sort(:,count1)
-! enddo
-!  do count1=1,ntarg
-!   write (*,*) 'targ: ',count1,targ(:,count1)
-! enddo
-!write (*,*) 'ntarg_vect: ',ntarg_vect,n_regions
+
+
  call lpcomp_em_muller_far_dir(npatches,norders,ixyzs,&
   &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targ_sort,&
-  &ipatch_id,uvs_targ,eps,zpars,sigma,E_far_aux,H_far_aux,n_regions,ntarg_vect)
+  &ipatch_id,uvs_targ,eps,zpars,sigma,E_far_aux, &
+  H_far_aux,n_regions,ntarg_vect)
 
  do count1=1,ntarg
    E_far(:,count1)=E_far_aux(:,permutation_targs(count1))
@@ -2539,7 +2535,7 @@ end subroutine evaluate_field_muller
       integer nover,npolso
       integer norder,npols
       integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
-      complex *16, allocatable :: wnear(:)
+      complex *16, allocatable :: wnear(:,:)
 
       real *8, allocatable :: srcover(:,:),wover(:)
       integer, allocatable :: ixyzso(:),novers(:)
@@ -2624,14 +2620,13 @@ end subroutine evaluate_field_muller
 !c   compute near quadrature correction
 !c
       nquad = iquad(nnz+1)-1
-      write (*,*) 'nquad: ',nquad
-      allocate(wnear(12*nquad))
-      
-!C$OMP PARALLEL DO DEFAULT(SHARED)      
-      do i=1,12*nquad
-        wnear(i) = 0
+      allocate(wnear(nquad,12))
+
+      do j=1,12
+        do i=1,nquad
+          wnear(i,j) = 0
+        enddo
       enddo
-!C$OMP END PARALLEL DO    
 
 
       iquadtype = 1
@@ -3126,7 +3121,7 @@ end subroutine get_curlcurlSka
 !    nquad - integer
 !      number of entries in wnear
 !
-!    wnear  - complex *16(36*nquad)
+!    wnear  - complex *16(nquad,12)
 !      near field precomputed quadrature
 !
 !    sigma - complex *16(2*ns)
@@ -3547,11 +3542,11 @@ end subroutine em_muller_far_FMM
 subroutine test_accuracy_em_muller(npatches,norders,ixyzs,iptype,npts,srccoefs,&
     &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
     &contrast_matrix,exposed_surfaces,eps,zpars,sigma,P0,vf,direction, &
-    &Pol,nx,ny,erre,errh)
+    &Pol,err_est)
 implicit none
 
  !List of calling arguments
- integer, intent(in) :: npatches,npts,n_components,ntarg,nx,ny
+ integer, intent(in) :: npatches,npts,n_components,ntarg
  integer, intent(in) :: norders(npatches),npatches_vect(n_components),ixyzs(npatches+1),iptype(npatches)
  real ( kind = 8 ), intent(in) :: srcvals(12,npts), srccoefs(9,npts),targ(3,ntarg),wts(npts)
  integer, intent(in) :: sorted_vector(n_components+1)
@@ -3572,7 +3567,7 @@ implicit none
  complex ( kind = 8 ) ep0,mu0,ep,mu
  complex ( kind = 8 ), allocatable :: E_far(:,:), H_far(:,:),E_0(:,:), H_0(:,:)
  complex ( kind = 8 ), allocatable :: E_far_aux(:,:),H_far_aux(:,:)
- real *8 erre,errh,re,rh
+ real *8 erre,errh,re,rh,err_est
  character (len=100) nombre_plot
  integer ( kind = 8 ) M_plot,N_plot
 
@@ -3678,14 +3673,7 @@ implicit none
     rh = rh + abs(H_0(1,count1))**2 + abs(H_0(2,count1))**2 +  &
       abs(H_0(3,count1))**2
  enddo
-
- call prin2('E_0=*',E_0,24)
- call prin2('H_0=*',H_0,24)
-
- erre = sqrt(erre/re)
- errh = sqrt(errh/rh)
- call prin2('erre=*',erre,1)
- call prin2('errh=*',errh,1)
+ err_est = sqrt((erre+errh)/(re+rh))
 
 
 return

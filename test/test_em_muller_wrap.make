@@ -62,10 +62,11 @@ FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
 
 .PHONY: all clean 
 
-OBJECTS =  example_em_muller_trans_v2.o \
+OBJECTS =  test_em_muller_wrap.o \
   $ ../src/topol_sort.o \
   $ ../src/plot_tools.o \
   $ ../src/em_muller_trans_v2.o \
+  $ ../src/em_muller_trans_wrap.o \
 #
 # use only the file part of the filename, then manually specify
 # the build location
