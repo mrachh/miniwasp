@@ -31,7 +31,7 @@ dP[3,0] = 1.0
 # set wave number of problem, should be consistent with
 # the units of prescribed geometry
 
-# currently set to wave length of green light
+# currently set to wave length of green light*6 (for faster run time)
 omega = np.pi*2/3600.0
 
 # set material parameters on either side of each component
