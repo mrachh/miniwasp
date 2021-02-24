@@ -1457,7 +1457,7 @@ implicit none
 	real ( kind = 8 ), intent(in) :: srcvals(12,ns)
   complex ( kind = 8 ), intent(in) :: omega
 	complex ( kind = 8 ), intent(out) :: RHS(4*ns)
-  logical *8, intent(in) :: exposed_surfaces(n_components)
+  logical, intent(in) :: exposed_surfaces(n_components)
 	
 	!List of local variables
   complex ( kind = 8 ) ep0,mu0,ep1,mu1
@@ -1537,7 +1537,7 @@ implicit none
 	real ( kind = 8 ), intent(in) :: srcvals(12,ns)
   complex ( kind = 8 ), intent(in) :: omega
 	complex ( kind = 8 ), intent(out) :: RHS(4*ns)
-  logical *8, intent(in) :: exposed_surfaces(n_components)
+  logical, intent(in) :: exposed_surfaces(n_components)
 	
 	!List of local variables
   complex ( kind = 8 ) ep0,mu0,ep1,mu1
@@ -2353,7 +2353,7 @@ implicit none
  real ( kind = 8 ), intent(in) :: srcvals(12,npts), srccoefs(9,npts),targ(3,ntarg),wts(npts)
  integer, intent(in) :: sorted_vector(n_components+1)
  complex ( kind = 8 ), intent(in) :: contrast_matrix(4,n_components),zpars(3),sigma(4*npts)
- logical *8 exposed_surfaces(n_components)
+ logical exposed_surfaces(n_components)
  real ( kind = 8 ), intent(in) :: eps
  complex ( kind = 8 ), intent(out) :: E_far(3,ntarg),H_far(3,ntarg)
 
@@ -3551,7 +3551,7 @@ implicit none
  real ( kind = 8 ), intent(in) :: srcvals(12,npts), srccoefs(9,npts),targ(3,ntarg),wts(npts)
  integer, intent(in) :: sorted_vector(n_components+1)
  complex ( kind = 8 ), intent(in) :: contrast_matrix(4,n_components),zpars(3),sigma(4*npts)
- logical *8 exposed_surfaces(n_components)
+ logical exposed_surfaces(n_components)
  real ( kind = 8 ), intent(in) :: eps
  real ( kind = 8 ), intent(in) :: P0(3), direction(2)
  complex ( kind = 8 ), intent(in) :: vf(3),Pol(2)
@@ -3699,7 +3699,7 @@ implicit none
  real ( kind = 8 ), intent(in) :: targ(3,ntarg),wts(npts)
  integer, intent(in) :: sorted_vector(n_components+1)
  complex ( kind = 8 ), intent(in) :: contrast_matrix(4,n_components),zpars(1)
- logical *8 exposed_surfaces(n_components)
+ logical exposed_surfaces(n_components)
  real ( kind = 8 ), intent(in) :: eps
  real ( kind = 8 ), intent(in) :: P0(3), direction(2)
  complex ( kind = 8 ), intent(in) :: vf(3),Pol(2)

@@ -1,4 +1,57 @@
+!   This file has the following user-callable routines
+!
+!   em_solver_wrap_mem - estimate the number of patches and points
+!     in the geometry prescription defined through a collection
+!     of go3 files encoded in a string, with each separate
+!     component separated by a '?'
+!
+!   em_solver_open_geom - get the surface discretization info
+!     for the geometry defined above
+!
+!   em_solver_wrap - solve the dielectric problem using the
+!   muller representation. 
+!    * Geometry to be defined via a string  which encodes a 
+!      collection of go3 files
+!    * Material parameters must be passed in as a 4,n_components
+!      vector, where for each component, \ep, \mu
+!      is defined for either side of the normal
+!    * Boundary condition is either a plane wave on the exposed
+!      surface with a prescribed direction and polarization
+!           OR
+!      an analytical test where the field in each region
+!      is defined via the plane wave, and the field in the
+!      exterior region is defined by a point dipole
+!      located at the centroid of the first component
+!      with orientation vector (1,2,3) scaled by 1e-3
+!    * On output, returns the u,v components of the surface
+!      currents, and an estimated error if the analytical 
+!      test is being done
+!
+!   em_solver_wrap_postproc - evaluate the solution
+!   at an arbitrary collection of targets where the u,v
+!   projection of surface currents are know
+!    * Geometry as defined above
+!    * Note: routine might currently fail if there are too
+!      many targets in the volume close to a particular triangle
+!      in the discretization. One temporary fix is to
+!      change the following lines in
+!      (fmm3dbie download folder)/src/quadratures/ggq-quads.f
+!
+!      line 215, 623: (Set ntrimax to a higher value)
+!
+!      Make sure to reinstall the library after making the
+!      changes
+!    
+!
+!    em_sol_exact - computes the exact solution used in the analytic
+!    test in em_solver_wrap. 
+!
+
+
       subroutine em_solver_wrap_mem(string0,n_components,npatches,npts)
+!
+!f2py intent(in) string0,n_components
+!f2py intent(out) npatches,npts
 !
 !  This subroutine estimates the number of points 
 !  for the given string defining the geometry
@@ -51,6 +104,10 @@
       subroutine em_solver_open_geom(string0,n_components,dP, &
         npatches,npts,eps,npatches_vect,npts_vect,norders,ixyzs,iptype, &
         srcvals,srccoefs,wts,sorted_vector,exposed_surfaces)
+!
+!f2py intent(in) string0,n_componnts,dP,npatches,npts,eps
+!f2py intent(out) npatches_vect,npts_vect,norders,ixyzs,iptype
+!f2py intent(out) srcvals,srccoefs,wts,sorted_vector,exposed_surfaces
 !
 !  This subroutine takes in the string format for a collection
 !  of go3 files and returns relevant surface information
@@ -108,7 +165,7 @@
       integer, intent(out) :: iptype(npatches)
       real *8, intent(out) :: srcvals(12,npts),srccoefs(9,npts),wts(npts)
       integer, intent(out) :: sorted_vector(n_components+1)
-      logical *8, intent(out) :: exposed_surfaces(n_components)
+      logical, intent(out) :: exposed_surfaces(n_components)
       integer, allocatable :: iwords(:)
 
       character *2000, string1
@@ -173,6 +230,11 @@
       subroutine em_solver_wrap(string0,n_components,dP, &
         contrast_matrix,npts,omega,icase,direction,pol, &
         eps,eps_gmres,soln,err_est)
+!
+!f2py intent(in) string0,n_components,dP,contrast_matrix
+!f2py intent(in) npts,omega,icase,direction,pol
+!f2py intent(in) eps,eps_gmres
+!f2py intent(out) soln,err_est
 !
 !  This subroutine solves the dielectric probleem either
 !  for a known analytic solution constructed using the
@@ -282,7 +344,7 @@
       real *8, allocatable :: srcvals_extended(:,:)
 
       real *8, allocatable :: targs(:,:)
-      logical *8, allocatable :: exposed_surfaces(:)
+      logical, allocatable :: exposed_surfaces(:)
 
       real *8 x_min,x_max,y_min,y_max,z_min,z_max,dx,dy,dz
       real *8 xa,ya,za
@@ -468,6 +530,11 @@
       subroutine em_solver_wrap_postproc(string0,n_components,dP, &
         contrast_matrix,npts,omega,eps,soln,ntarg,targs,E,H)
 !
+!f2py intent(in) string0,n_components,dP,contrast_matrix
+!f2py intent(in) npts,omega
+!f2py intent(in) eps,soln,ntarg,targs
+!f2py intent(out) E,H
+!
 !  This subroutine handles the postprocessing for the solution
 !  of the dielectric problem, where the u,v projections of the
 !  surface currents are already computed.
@@ -556,7 +623,7 @@
       
       real *8, allocatable :: srcvals_extended(:,:)
 
-      logical *8, allocatable :: exposed_surfaces(:)
+      logical, allocatable :: exposed_surfaces(:)
 
       real *8 x_min,x_max,y_min,y_max,z_min,z_max,dx,dy,dz
       real *8 xa,ya,za
@@ -625,6 +692,13 @@
       subroutine em_sol_exact(string0,n_components,dP, &
         contrast_matrix,npts,omega,eps,direction,pol,ntarg,targs,E,H)
 !
+!
+!f2py intent(in) string0,n_components,dP,contrast_matrix
+!f2py intent(in) npts,omega,direction,pol
+!f2py intent(in) eps,ntarg,targs
+!f2py intent(out) E,H
+!
+!  This subroutine handles the postprocessing for the solution
 !  This subroutine handles the postprocessing for the solution
 !  of the dielectric problem, and computes the exact analytic
 !  solution used at a collection of target points
@@ -719,7 +793,7 @@
       real *8, allocatable :: srcvals_extended(:,:)
       real *8, allocatable :: targ0(:,:)
 
-      logical *8, allocatable :: exposed_surfaces(:)
+      logical, allocatable :: exposed_surfaces(:)
 
       real *8 x_min,x_max,y_min,y_max,z_min,z_max,dx,dy,dz
       real *8 xa,ya,za

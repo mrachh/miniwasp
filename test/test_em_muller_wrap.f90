@@ -12,7 +12,7 @@
       real *8, allocatable :: srcvals(:,:),srccoefs(:,:),wts(:)
       real *8, allocatable :: cms(:,:),rads(:)
       integer, allocatable :: sorted_vector(:)
-      logical *8, allocatable :: exposed_surfaces(:)
+      logical, allocatable :: exposed_surfaces(:)
       complex *16 pol(2)
       complex *16 ima
       data ima/(0.0d0,1.0d0)/

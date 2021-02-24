@@ -123,7 +123,7 @@ implicit none
  real ( kind = 8 ), intent(in) :: srcvals(12,npts),eps
  real ( kind = 8 ), intent(in) :: srccoefs(9,npts),wts(npts)
  integer, intent(out) :: sorted_vector(n_components+1)
- logical *8 exposed_surfaces(n_components)
+ logical exposed_surfaces(n_components)
 
  !List of local variables
  integer count1,count2,icount,n_aux

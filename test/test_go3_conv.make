@@ -1,4 +1,4 @@
-EXEC = int2-fds
+EXEC = int2-conv
 #HOST = gcc
 HOST = gcc-openmp
 #HOST = intel
