@@ -940,7 +940,7 @@
 !      - fname2: vtk file for writing the imag part of vector field
       implicit real *8 (a-h,o-z)
       integer, intent(in) :: npatches,npts
-      integer, intent(in) :: norders(npatches),ixyzs(npathces+1)
+      integer, intent(in) :: norders(npatches),ixyzs(npatches+1)
       integer, intent(in) :: iptype(npatches)
       real *8, intent(in) :: srcvals(12,npts),srccoefs(9,npts)
       complex *16, intent(in) :: zdat(2*npts)
