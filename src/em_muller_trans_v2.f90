@@ -2067,23 +2067,23 @@ subroutine fieldsPWomega(omega,ep,mu,xyz,n,E,H,direction,Pol)
     phi=direction(1)
     theta=direction(2)
 
-	  zk=omega*sqrt(ep*mu)
+    zk=omega*sqrt(ep*mu)
     k_vect(1)=zk*cos(phi)*sin(theta)
     k_vect(2)=zk*sin(phi)*sin(theta)
     k_vect(3)=zk*cos(theta)
     E_phi=Pol(1)
     E_theta=Pol(2)
-	  eta=sqrt(mu/ep)
+    eta=sqrt(mu/ep)
     do i=1,n
       eprop=exp(ima*(k_vect(1)*xyz(1,i)+k_vect(2)*xyz(2,i)+k_vect(3)*xyz(3,i)))
-      E(1,i)=(E_theta*cos(theta)*cos(phi)-E_phi*sin(phi))*eprop;
-      E(2,i)=(E_theta*cos(theta)*sin(phi)+E_phi*cos(phi))*eprop;
-      E(3,i)=(-E_theta*sin(theta))*eprop;
+      E(1,i)=(E_theta*cos(theta)*cos(phi)-E_phi*sin(phi))*eprop
+      E(2,i)=(E_theta*cos(theta)*sin(phi)+E_phi*cos(phi))*eprop
+      E(3,i)=(-E_theta*sin(theta))*eprop
       H_phi=E_theta/eta
       H_theta=-E_phi/eta       
-      H(1,i)=(H_theta*cos(theta)*cos(phi)-H_phi*sin(phi))*eprop;
-      H(2,i)=(H_theta*cos(theta)*sin(phi)+H_phi*cos(phi))*eprop;
-      H(3,i)=(-H_theta*sin(theta))*eprop;
+      H(1,i)=(H_theta*cos(theta)*cos(phi)-H_phi*sin(phi))*eprop
+      H(2,i)=(H_theta*cos(theta)*sin(phi)+H_phi*cos(phi))*eprop
+      H(3,i)=(-H_theta*sin(theta))*eprop
     enddo
 
 return
@@ -2545,7 +2545,7 @@ end subroutine evaluate_field_muller
       integer i,j,jpatch,jquadstart,jstart
 
       integer ipars
-      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime
+      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime,eps0
 
 
       real *8 ttot,done,pi
@@ -2574,6 +2574,7 @@ end subroutine evaluate_field_muller
 !C$OMP PARALLEL DO DEFAULT(SHARED) 
       do i=1,npatches
         rad_near(i) = rads(i)*rfac
+        rad_near(i) = 3.0d0
       enddo
 !C$OMP END PARALLEL DO      
 
@@ -2586,7 +2587,8 @@ end subroutine evaluate_field_muller
       
       call findnear(cms,npatches,rad_near,ndtarg,targs,ntarg,row_ptr,& 
        &col_ind)
-
+      call prinf('nnz=*',nnz,1)
+      
       allocate(iquad(nnz+1)) 
       call get_iquad_rsc(npatches,ixyzs,ntarg,nnz,row_ptr,col_ind,&
        &iquad)
@@ -2601,8 +2603,9 @@ end subroutine evaluate_field_muller
 !c
 
       allocate(novers(npatches),ixyzso(npatches+1))
+      eps0 = 1.0d-12
 
-      call get_far_order(eps,npatches,norders,ixyzs,iptype,cms,&
+      call get_far_order(eps0,npatches,norders,ixyzs,iptype,cms,&
        &rads,npts,srccoefs,ndtarg,ntarg,targs,ikerorder,zpars(1),&
        &nnz,row_ptr,col_ind,rfac,novers,ixyzso)
 
@@ -2633,7 +2636,7 @@ end subroutine evaluate_field_muller
 
       call getnearquad_muller_far_dir(npatches,norders,&
        &ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
-       &ipatch_id,uvs_targ,eps,zpars,iquadtype,nnz,row_ptr,col_ind,&
+       &ipatch_id,uvs_targ,eps0,zpars,iquadtype,nnz,row_ptr,col_ind,&
        &iquad,rfac0,nquad,wnear)
 
 !c
@@ -2642,7 +2645,7 @@ end subroutine evaluate_field_muller
 !c
       call lpcomp_em_muller_far_addsub(npatches,norders,ixyzs,&
        &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
-       &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,sigma,novers,&
+       &eps0,zpars,nnz,row_ptr,col_ind,iquad,nquad,sigma,novers,&
        &npts_over,ixyzso,srcover,wover,E_far,H_far,wnear,n_regions,ntarg_vect)
 
 
@@ -2842,182 +2845,105 @@ implicit none
 !  through getnearquad_DFIE
 
     !List of calling arguments
-	integer, intent(in) :: ndt,ndd,ndz,ndi
+    integer, intent(in) :: ndt,ndd,ndz,ndi
 	real ( kind = 8 ), intent(in) :: srcinfo(12)
 	real ( kind = 8 ), intent(in) :: targinfo(ndt)
-	integer, intent(in) :: ipars(ndi)
+    integer, intent(in) :: ipars(ndi)
 	real ( kind = 8 ), intent(in) :: dpars(ndd)
-	complex ( kind = 8 ), intent(in) :: zpars(ndz)
-	complex ( kind = 8 ), intent(out) :: E_val
-	
-	!List of local variables
+    complex ( kind = 8 ), intent(in) :: zpars(ndz)
+    complex ( kind = 8 ), intent(out) :: E_val
+
+    !List of local variables
 	real ( kind = 8 ) ru_s(3),rv_s(3),n_s(3)
 	real ( kind = 8 ) ru_t(3),rv_t(3),n_t(3)
 	real ( kind = 8 ) du(3), dv(3),sour(3),targ(7)
 	real ( kind = 8 ) r, dr(3),aux_real
-	complex ( kind = 8 ) curlSka(3,2),curlcurlSka(3,2)
+    complex ( kind = 8 ) curlSka(3,2),curlcurlSka(3,2)
 	real ( kind = 8 ) xprod_aux1(3),xprod_aux2(3),xprod_aux3(3),xprod_aux4(3)
-	complex ( kind = 8 ) R1,R2,ima,my_exp,omega	
-	complex ( kind = 8 ) mu,ep,zk
+    complex ( kind = 8 ) R1,R2,ima,my_exp,omega
+    complex ( kind = 8 ) mu,ep,zk
 	real ( kind = 8 ) pi
-	integer count1,count2
-	complex ( kind = 8 )  E_mat(6,4)
+    integer count1,count2
+    complex ( kind = 8 )  E_mat(6,4)
 
-	
-	pi=3.1415926535897932384626433832795028841971d0
-	ima=(0.0d0,1.0d0)
-	omega=zpars(1)
-	
-	sour(1)=srcinfo(1)
-	sour(2)=srcinfo(2)
-	sour(3)=srcinfo(3)
-	
-	n_s(1)=srcinfo(10)
-	n_s(2)=srcinfo(11)
-	n_s(3)=srcinfo(12)	
 
-	targ(1)=targinfo(1)
-	targ(2)=targinfo(2)
-	targ(3)=targinfo(3)
+    pi=3.1415926535897932384626433832795028841971d0
+    ima=(0.0d0,1.0d0)
+    omega=zpars(1)
+
+    sour(1)=srcinfo(1)
+    sour(2)=srcinfo(2)
+    sour(3)=srcinfo(3)
+
+    n_s(1)=srcinfo(10)
+    n_s(2)=srcinfo(11)
+    n_s(3)=srcinfo(12)
+
+    targ(1)=targinfo(1)
+    targ(2)=targinfo(2)
+    targ(3)=targinfo(3)
 
   ep=targinfo(4)+ima*targinfo(5)
   mu=targinfo(6)+ima*targinfo(7)
 
-	dr(1)=targ(1)-sour(1)
-	dr(2)=targ(2)-sour(2)
-	dr(3)=targ(3)-sour(3)
-
-	
-	r=sqrt((dr(1))**2+(dr(2))**2+(dr(3))**2)
-	zk=omega*sqrt(ep*mu)
-
-	R1=(ima*zk*r-1.0d0)/r**3*exp(ima*zk*r)/(4.0d0*pi)
-	R2=((ima*zk)**2/r**3-3.0d0*ima*zk/r**4+3.0d0/r**5)*exp(ima*zk*r)/&
-	 &(4.0d0*pi)
-	my_exp=exp(ima*zk*r)/(4.0d0*pi)
-	
-	call orthonormalize(srcinfo(4:6),n_s,ru_s,rv_s)
+  dr(1)=targ(1)-sour(1)
+  dr(2)=targ(2)-sour(2)
+  dr(3)=targ(3)-sour(3)
 
 
-    if (ipars(1).eq.1) then
-      if (ipars(2).eq.1) then
-	      call my_cross_v2(dr,ru_s,xprod_aux1)
-        E_val=xprod_aux1(1)*R1
-      elseif (ipars(2).eq.2) then
-	      call my_cross_v2(dr,rv_s,xprod_aux2)
-        E_val=xprod_aux2(1)*R1
-      elseif (ipars(2).eq.3) then
-        E_val=(zk**2*ru_s(1)*my_exp/r+R1*ru_s(1)-dr(1)*DOT_PRODUCT(ru_s,-dr)*R2)/(-ima*omega)
-      elseif (ipars(2).eq.4) then
-        E_val=(zk**2*rv_s(1)*my_exp/r+R1*rv_s(1)-dr(1)*DOT_PRODUCT(rv_s,-dr)*R2)/(-ima*omega)
-      endif
-    elseif (ipars(1).eq.2) then
-      if (ipars(2).eq.1) then
-	      call my_cross_v2(dr,ru_s,xprod_aux1)
-        E_val=xprod_aux1(2)*R1
-      elseif (ipars(2).eq.2) then
-	      call my_cross_v2(dr,rv_s,xprod_aux2)
-        E_val=xprod_aux2(2)*R1
-      elseif (ipars(2).eq.3) then
-        E_val=(zk**2*ru_s(2)*my_exp/r+R1*ru_s(2)-dr(2)*DOT_PRODUCT(ru_s,-dr)*R2)/(-ima*omega)
-      elseif (ipars(2).eq.4) then
-        E_val=(zk**2*rv_s(2)*my_exp/r+R1*rv_s(2)-dr(2)*DOT_PRODUCT(rv_s,-dr)*R2)/(-ima*omega)
-      endif
-    elseif (ipars(1).eq.3) then 
-      if (ipars(2).eq.1) then
-	      call my_cross_v2(dr,ru_s,xprod_aux1)
-        E_val=xprod_aux1(3)*R1
-      elseif (ipars(2).eq.2) then
-	      call my_cross_v2(dr,rv_s,xprod_aux2)
-        E_val=xprod_aux2(3)*R1
-      elseif (ipars(2).eq.3) then
-        E_val=(zk**2*ru_s(3)*my_exp/r+R1*ru_s(3)-dr(3)*DOT_PRODUCT(ru_s,-dr)*R2)/(-ima*omega)
-      elseif (ipars(2).eq.4) then
-        E_val=(zk**2*rv_s(3)*my_exp/r+R1*rv_s(3)-dr(3)*DOT_PRODUCT(rv_s,-dr)*R2)/(-ima*omega)
-      endif
+  r=sqrt((dr(1))**2+(dr(2))**2+(dr(3))**2)
+  zk=omega*sqrt(ep*mu)
+
+  R1=(ima*zk*r-1.0d0)/r**3*exp(ima*zk*r)/(4.0d0*pi)
+  R2=((ima*zk)**2/r**3-3.0d0*ima*zk/r**4+3.0d0/r**5)*exp(ima*zk*r)/&
+     &(4.0d0*pi)
+  my_exp=exp(ima*zk*r)/(4.0d0*pi)
+
+  call orthonormalize(srcinfo(4:6),n_s,ru_s,rv_s)
+
+
+  if (ipars(1).eq.1) then
+    if (ipars(2).eq.1) then
+      call my_cross_v2(dr,ru_s,xprod_aux1)
+      E_val=xprod_aux1(1)*R1
+    elseif (ipars(2).eq.2) then
+      call my_cross_v2(dr,rv_s,xprod_aux2)
+      E_val=xprod_aux2(1)*R1
+    elseif (ipars(2).eq.3) then
+      E_val=(zk**2*ru_s(1)*my_exp/r+R1*ru_s(1)-dr(1)*DOT_PRODUCT(ru_s,-dr)*R2)/(-ima*omega)
+    elseif (ipars(2).eq.4) then
+      E_val=(zk**2*rv_s(1)*my_exp/r+R1*rv_s(1)-dr(1)*DOT_PRODUCT(rv_s,-dr)*R2)/(-ima*omega)
     endif
+  elseif (ipars(1).eq.2) then
+    if (ipars(2).eq.1) then
+      call my_cross_v2(dr,ru_s,xprod_aux1)
+      E_val=xprod_aux1(2)*R1
+    elseif (ipars(2).eq.2) then
+      call my_cross_v2(dr,rv_s,xprod_aux2)
+      E_val=xprod_aux2(2)*R1
+    elseif (ipars(2).eq.3) then
+      E_val=(zk**2*ru_s(2)*my_exp/r+R1*ru_s(2)-dr(2)*DOT_PRODUCT(ru_s,-dr)*R2)/(-ima*omega)
+    elseif (ipars(2).eq.4) then
+      E_val=(zk**2*rv_s(2)*my_exp/r+R1*rv_s(2)-dr(2)*DOT_PRODUCT(rv_s,-dr)*R2)/(-ima*omega)
+    endif
+  elseif (ipars(1).eq.3) then 
+    if (ipars(2).eq.1) then
+      call my_cross_v2(dr,ru_s,xprod_aux1)
+      E_val=xprod_aux1(3)*R1
+    elseif (ipars(2).eq.2) then
+      call my_cross_v2(dr,rv_s,xprod_aux2)
+      E_val=xprod_aux2(3)*R1
+    elseif (ipars(2).eq.3) then
+      E_val=(zk**2*ru_s(3)*my_exp/r+R1*ru_s(3)-dr(3)*DOT_PRODUCT(ru_s,-dr)*R2)/(-ima*omega)
+    elseif (ipars(2).eq.4) then
+      E_val=(zk**2*rv_s(3)*my_exp/r+R1*rv_s(3)-dr(3)*DOT_PRODUCT(rv_s,-dr)*R2)/(-ima*omega)
+    endif
+  endif
 
 
 
 return
 end subroutine em_muller_far
-
-
-
-
-subroutine get_curlSka(ru_s,rv_s,n_s,dr,R1,my_exp,r,curlSka)
-implicit none
-
-	!List of calling arguments
-	real ( kind = 8 ), intent(in) :: ru_s(3),rv_s(3),n_s(3)
-	real ( kind = 8 ), intent(in) :: dr(3),r
-	complex ( kind = 8 ), intent(in) :: R1,my_exp
-	complex ( kind = 8 ), intent(out) :: curlSka(3,2)
-	
- 	!List of local variables
-	real ( kind = 8 ) xprod_aux1(3),xprod_aux2(3)
-
-	call my_cross_v2(dr,ru_s,xprod_aux1)
-	call my_cross_v2(dr,rv_s,xprod_aux2)
-	
-	curlSka(1,1)=xprod_aux1(1)*R1
-  curlSka(2,1)=xprod_aux1(2)*R1
-	curlSka(3,1)=xprod_aux1(3)*R1
-
-
-	curlSka(1,2)=xprod_aux2(1)*R1
-  curlSka(2,2)=xprod_aux2(2)*R1
-	curlSka(3,2)=xprod_aux2(3)*R1
-
-return
-end subroutine get_curlSka
-
-
-
-
-subroutine get_curlcurlSka(ru_s,rv_s,n_s,dr,R1,R2,zk,my_exp,r,curlcurlSka)
-implicit none
-
-	!List of calling arguments
-	real ( kind = 8 ), intent(in) :: ru_s(3),rv_s(3),n_s(3)
-	real ( kind = 8 ), intent(in) :: dr(3),r
-	complex ( kind = 8 ), intent(in) :: R1,R2,zk,my_exp
-	complex ( kind = 8 ), intent(out) :: curlcurlSka(3,2)
-	
- 	!List of local variables
-	real ( kind = 8 ) xprod_aux1(3),xprod_aux2(3)
-	complex ( kind = 8 ) Skb(3,2)	
-	
-	Skb(1,1)=ru_s(1)*my_exp/r
-	Skb(2,1)=ru_s(2)*my_exp/r
-	Skb(3,1)=ru_s(3)*my_exp/r
-
-	Skb(1,2)=rv_s(1)*my_exp/r
-	Skb(2,2)=rv_s(2)*my_exp/r
-	Skb(3,2)=rv_s(3)*my_exp/r
-
-	curlcurlSka(1,1)=zk**2*Skb(1,1)+R1*ru_s(1)-dr(1)*DOT_PRODUCT(ru_s,-dr)*R2
-	curlcurlSka(2,1)=zk**2*Skb(2,1)+R1*ru_s(2)-dr(2)*DOT_PRODUCT(ru_s,-dr)*R2
-	curlcurlSka(3,1)=zk**2*Skb(3,1)+R1*ru_s(3)-dr(3)*DOT_PRODUCT(ru_s,-dr)*R2
-
-	curlcurlSka(1,2)=zk**2*Skb(1,2)+R1*rv_s(1)-dr(1)*DOT_PRODUCT(rv_s,-dr)*R2
-	curlcurlSka(2,2)=zk**2*Skb(2,2)+R1*rv_s(2)-dr(2)*DOT_PRODUCT(rv_s,-dr)*R2
-	curlcurlSka(3,2)=zk**2*Skb(3,2)+R1*rv_s(3)-dr(3)*DOT_PRODUCT(rv_s,-dr)*R2
-
-!	nxcurlcurlSka(1,1)=nxcurlcurlSka(1,1)+(-DOT_PRODUCT(rv_t,ru_s)*R1)
-!	nxcurlcurlSka(1,2)=nxcurlcurlSka(1,2)+(-DOT_PRODUCT(rv_t,rv_s)*R1)
-!	nxcurlcurlSka(2,1)=nxcurlcurlSka(2,1)+(+DOT_PRODUCT(ru_t,ru_s)*R1)
-!	nxcurlcurlSka(2,2)=nxcurlcurlSka(2,2)+(+DOT_PRODUCT(ru_t,rv_s)*R1)
-	
-!	nxcurlcurlSka(1,1)=nxcurlcurlSka(1,1)-(-DOT_PRODUCT(rv_t,dr)*DOT_PRODUCT(ru_s,-dr)*R2)
-!	nxcurlcurlSka(1,2)=nxcurlcurlSka(1,2)-(-DOT_PRODUCT(rv_t,dr)*DOT_PRODUCT(rv_s,-dr)*R2)
-!	nxcurlcurlSka(2,1)=nxcurlcurlSka(2,1)-(+DOT_PRODUCT(ru_t,dr)*DOT_PRODUCT(ru_s,-dr)*R2)
-!	nxcurlcurlSka(2,2)=nxcurlcurlSka(2,2)-(+DOT_PRODUCT(ru_t,dr)*DOT_PRODUCT(rv_s,-dr)*R2)
-
-return
-end subroutine get_curlcurlSka
-
-
 
 
 
@@ -3233,22 +3159,22 @@ end subroutine get_curlcurlSka
       allocate(sources(3,ns),targvals(3,ntarg))
       allocate(charges(ns),dipvec(3,ns))
       allocate(sigmaover(4*ns))
-	    allocate(pot_aux(4*ntarg))
+      allocate(pot_aux(4*ntarg))
 
 ! 
 !       oversample density
 
     call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
-	&npts,sigma(1:npts),novers,ixyzso,ns,sigmaover(1:ns))
-	       
+     &npts,sigma(1:npts),novers,ixyzso,ns,sigmaover(1:ns))
+       
     call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
-	&npts,sigma(npts+1:2*npts),novers,ixyzso,ns,sigmaover(ns+1:2*ns))
+     &npts,sigma(npts+1:2*npts),novers,ixyzso,ns,sigmaover(ns+1:2*ns))
 
-	call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
-	&npts,sigma(2*npts+1:3*npts),novers,ixyzso,ns,sigmaover(2*ns+1:3*ns))
+    call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
+      &npts,sigma(2*npts+1:3*npts),novers,ixyzso,ns,sigmaover(2*ns+1:3*ns))
 
-	call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
-	&npts,sigma(3*npts+1:4*npts),novers,ixyzso,ns,sigmaover(3*ns+1:4*ns))
+    call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
+     &npts,sigma(3*npts+1:4*npts),novers,ixyzso,ns,sigmaover(3*ns+1:4*ns))
 
       ra = 0
 
@@ -3256,9 +3182,9 @@ end subroutine get_curlcurlSka
 !       fmm
 !
 
-		call get_fmm_thresh(12,ns,srcover,ndtarg,ntarg,targs,thresh)
-       ifdir=0
-	  
+    call get_fmm_thresh(12,ns,srcover,ndtarg,ntarg,targs,thresh)
+    ifdir=0
+
     istart=1
     ifinish=ntarg_vect(1)
     !write (*,*) 'n_regions: ', n_regions
@@ -3271,16 +3197,28 @@ end subroutine get_curlcurlSka
      ! write (*,*) targs(:,istart)
       !Calculate the far_field with FMM		
 
-       call em_muller_far_FMM(eps,zpars_aux,ns,ntarg_vect(count1),srcover,ndtarg,targs(:,istart:ifinish),whtsover,&
+       call em_muller_far_FMM(eps,zpars_aux,ns,ntarg_vect(count1),srcover, &
+      & ndtarg,targs(:,istart:ifinish),whtsover,&
       &sigmaover(1:ns),sigmaover(ns+1:2*ns),sigmaover(2*ns+1:3*ns),&
       &sigmaover(3*ns+1:4*ns),E_far(:,istart:ifinish),H_far(:,istart:ifinish),&
       &thresh,ifdir)
+       
 
       if (count1<n_regions) then
         istart=ifinish+1
         ifinish=istart+ntarg_vect(count1+1)-1
       endif
     enddo
+
+    call prin2('E_far=*',E_far,6)
+    call prin2('H_far=*',H_far,6)
+    call prin2('thresh=*',thresh,1)
+    call prinf('ns=*',ns,1)
+    call prinf('ntarg_vect=*',ntarg_vect,1)
+    call prinf('istart=*',istart,1)
+    call prinf('ifinish=*',ifinish,1)
+    E_far = 0
+    H_far = 0
 !!!!return
 !write (*,*) 'aquí no llega'
 !read (*,*)
@@ -3291,6 +3229,8 @@ end subroutine get_curlcurlSka
       do i=1,ntarg
         ep=targs(4,i)+ima*targs(5,i)
         mu=targs(6,i)+ima*targs(7,i)
+        call prin2('ep=*',ep,2)
+        call prin2('mu=*',mu,2)
         do j=row_ptr(i),row_ptr(i+1)-1
           jpatch = col_ind(j)
           npols = ixyzs(jpatch+1)-ixyzs(jpatch)
@@ -3335,6 +3275,8 @@ end subroutine get_curlcurlSka
           enddo
         enddo
       enddo
+      return
+
 
       ifdir=1
       i=0
@@ -3343,32 +3285,32 @@ end subroutine get_curlcurlSka
        zpars_aux(2)=targs(4,i+1)+ima*targs(5,i+1)
        zpars_aux(3)=targs(6,i+1)+ima*targs(7,i+1)
        do count2=1,ntarg_vect(count1)
-       i=i+1
-        nss = 0
-        do j=row_ptr(i),row_ptr(i+1)-1
-          jpatch = col_ind(j)
-          nss = nss + ixyzso(jpatch+1)-ixyzso(jpatch)
-        enddo
-        allocate(srctmp2(12,nss),wtmp2(nss))
-        allocate(ctmp2_a_u(nss),ctmp2_a_v(nss))
-	      allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
+         i=i+1
+         nss = 0
+         do j=row_ptr(i),row_ptr(i+1)-1
+           jpatch = col_ind(j)
+           nss = nss + ixyzso(jpatch+1)-ixyzso(jpatch)
+         enddo
+         allocate(srctmp2(12,nss),wtmp2(nss))
+         allocate(ctmp2_a_u(nss),ctmp2_a_v(nss))
+         allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
 
-        rmin = 1.0d6
-        ii = 0
-        do j=row_ptr(i),row_ptr(i+1)-1
-          jpatch = col_ind(j)
-          jstart = ixyzso(jpatch)-1
-          npover = ixyzso(jpatch+1)-ixyzso(jpatch)
-          do l=1,npover
-			      ii = ii+1
-			      srctmp2(:,ii) = srcover(:,jstart+l)
-			      ctmp2_a_u(ii)=sigmaover(jstart+l)
-			      ctmp2_a_v(ii)=sigmaover(jstart+l+ns)			
-			      ctmp2_b_u(ii)=sigmaover(jstart+l+2*ns)
-			      ctmp2_b_v(ii)=sigmaover(jstart+l+3*ns)
-			      wtmp2(ii)=whtsover(jstart+l)
+         ii = 0
+         do j=row_ptr(i),row_ptr(i+1)-1
+           jpatch = col_ind(j)
+           jstart = ixyzso(jpatch)-1
+           npover = ixyzso(jpatch+1)-ixyzso(jpatch)
+           do l=1,npover
+             ii = ii+1
+             srctmp2(:,ii) = srcover(:,jstart+l)
+             ctmp2_a_u(ii)=sigmaover(jstart+l)
+             ctmp2_a_v(ii)=sigmaover(jstart+l+ns)
+             ctmp2_b_u(ii)=sigmaover(jstart+l+2*ns)
+             ctmp2_b_v(ii)=sigmaover(jstart+l+3*ns)
+             wtmp2(ii)=whtsover(jstart+l)
           enddo
         enddo
+        E = 0
         call em_muller_far_FMM(eps,zpars_aux,nss,ntarg0,srctmp2,ndtarg,targs(:,i),&
         &wtmp2,ctmp2_a_u,ctmp2_a_v,ctmp2_b_u,ctmp2_b_v,&
         &E(1:3),E(4:6),thresh,ifdir)
@@ -3427,50 +3369,56 @@ implicit none
     integer count1,count2
     integer ifa_vect,ifb_vect,iflambda,ifrho,ifE,ifcurlE,ifdivE
 
-	  ima=(0.0d0,1.0d0)
+     ima=(0.0d0,1.0d0)
 
-	  omega=zpars(1)
-	  ep=zpars(2)
-	  mu=zpars(3)
-	 
-	  zk=omega*sqrt(ep*mu)
+     omega=zpars(1)
+     ep=zpars(2)
+     mu=zpars(3)
+ 
+     zk=omega*sqrt(ep*mu)
 
 
     allocate(a_vect(3,ns))
     allocate(b_vect(3,ns))
     allocate(lambda(ns))
-	  allocate(rho(ns))
+    allocate(rho(ns))
     allocate(E(3,nt))
     allocate(curlE(3,nt))
     allocate(divE(nt))
-	  allocate(n_vect_s(3,ns))
-	  allocate(n_vect_t(3,nt))
-	  allocate(u_vect_s(3,ns))
-	  allocate(v_vect_s(3,ns))
-	  allocate(u_vect_t(3,nt))
-	  allocate(v_vect_t(3,nt))
-	  allocate(source(3,ns))
-	  allocate(targets(3,nt))
+    allocate(n_vect_s(3,ns))
+    allocate(n_vect_t(3,nt))
+    allocate(u_vect_s(3,ns))
+    allocate(v_vect_s(3,ns))
+    allocate(u_vect_t(3,nt))
+    allocate(v_vect_t(3,nt))
+    allocate(source(3,ns))
+    allocate(targets(3,nt))
 
-	do count1=1,ns
+    do count1=1,ns
       n_vect_s(:,count1)=srcvals(10:12,count1)
       source(:,count1)=srcvals(1:3,count1)
-	enddo
-  do count1=1,nt
+    enddo
+    do count1=1,nt
       targets(:,count1)=targvals(1:3,count1)
-	enddo
-	call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:),u_vect_s,&
-	 &v_vect_s,ns)
-	
+    enddo
+    call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:),u_vect_s,&
+      &v_vect_s,ns)
+
     do count1=1,ns
-		  a_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1)+b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
-		  a_vect(2,count1)=(b_u(count1)*u_vect_s(2,count1)+b_v(count1)*v_vect_s(2,count1))/(-ima*omega)
-		  a_vect(3,count1)=(b_u(count1)*u_vect_s(3,count1)+b_v(count1)*v_vect_s(3,count1))/(-ima*omega)
-				
-      b_vect(1,count1)=(a_u(count1)*u_vect_s(1,count1)+a_v(count1)*v_vect_s(1,count1))*mu
-      b_vect(2,count1)=(a_u(count1)*u_vect_s(2,count1)+a_v(count1)*v_vect_s(2,count1))*mu
-      b_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1)+a_v(count1)*v_vect_s(3,count1))*mu
-	  enddo
+      a_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1) +  &
+          b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
+      a_vect(2,count1)=(b_u(count1)*u_vect_s(2,count1) + &
+          b_v(count1)*v_vect_s(2,count1))/(-ima*omega)
+      a_vect(3,count1)=(b_u(count1)*u_vect_s(3,count1) + &
+          b_v(count1)*v_vect_s(3,count1))/(-ima*omega)
+
+      b_vect(1,count1)=(a_u(count1)*u_vect_s(1,count1) + &
+         a_v(count1)*v_vect_s(1,count1))*mu
+      b_vect(2,count1)=(a_u(count1)*u_vect_s(2,count1) + &
+         a_v(count1)*v_vect_s(2,count1))*mu
+      b_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
+         a_v(count1)*v_vect_s(3,count1))*mu
+    enddo
 
     !Computing the full operator
     ifa_vect=1
@@ -3481,23 +3429,29 @@ implicit none
     ifcurlE=1
     ifdivE=0
 
-	call Vector_Helmholtz_targ2(eps,zk,ns,source,wts,ifa_vect,a_vect,&
-	 &ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
-	 &E_far,ifdivE,divE,nt,targets,thresh,ifdir)
+    call Vector_Helmholtz_targ2(eps,zk,ns,source,wts,ifa_vect,a_vect,&
+    &ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
+    &E_far,ifdivE,divE,nt,targets,thresh,ifdir)
 
 !	call Vector_Helmholtz_targ(eps,izk,ns,source,wts,ifa_vect,a_vect,ifb_vect,&
 !	 &b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,curlE,ifdivE,divE,nt,targets)
 
 
-	  do count1=1,ns
-		    b_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1)+b_v(count1)*v_vect_s(1,count1))*ep
-		    b_vect(2,count1)=(b_u(count1)*u_vect_s(2,count1)+b_v(count1)*v_vect_s(2,count1))*ep
-		    b_vect(3,count1)=(b_u(count1)*u_vect_s(3,count1)+b_v(count1)*v_vect_s(3,count1))*ep
-				
-        a_vect(1,count1)=(a_u(count1)*u_vect_s(1,count1)+a_v(count1)*v_vect_s(1,count1))/(ima*omega)
-        a_vect(2,count1)=(a_u(count1)*u_vect_s(2,count1)+a_v(count1)*v_vect_s(2,count1))/(ima*omega)
-        a_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1)+a_v(count1)*v_vect_s(3,count1))/(ima*omega)
-	  enddo
+     do count1=1,ns
+       b_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1) + &
+         b_v(count1)*v_vect_s(1,count1))*ep
+       b_vect(2,count1)=(b_u(count1)*u_vect_s(2,count1) + &
+         b_v(count1)*v_vect_s(2,count1))*ep
+       b_vect(3,count1)=(b_u(count1)*u_vect_s(3,count1) + &
+         b_v(count1)*v_vect_s(3,count1))*ep
+
+       a_vect(1,count1)=(a_u(count1)*u_vect_s(1,count1) + &
+         a_v(count1)*v_vect_s(1,count1))/(ima*omega)
+       a_vect(2,count1)=(a_u(count1)*u_vect_s(2,count1) + &
+         a_v(count1)*v_vect_s(2,count1))/(ima*omega)
+       a_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
+         a_v(count1)*v_vect_s(3,count1))/(ima*omega)
+     enddo
 
     !Computing the full operator
     ifa_vect=1
@@ -3567,7 +3521,7 @@ implicit none
  complex ( kind = 8 ) ep0,mu0,ep,mu
  complex ( kind = 8 ), allocatable :: E_far(:,:), H_far(:,:),E_0(:,:), H_0(:,:)
  complex ( kind = 8 ), allocatable :: E_far_aux(:,:),H_far_aux(:,:)
- real *8 erre,errh,re,rh,err_est
+ real *8 erre,errh,re,rh,err_est,rr
  character (len=100) nombre_plot
  integer ( kind = 8 ) M_plot,N_plot
 
@@ -3589,6 +3543,11 @@ implicit none
   call find_inclusion_vect(npatches,norders,ixyzs,iptype,npts,srccoefs,&
     &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
     &location_targs,eps)
+  call prinf('location_targs=*',location_targs,ntarg)
+  call prin2('targ=*',targ,3)
+  rr = sqrt(targ(1,1)**2 + targ(2,1)**2 + targ(3,1)**2)
+  call prin2('rr=*',rr,1)
+
   do count1=1,n_components
     if (exposed_surfaces(count1)) then
        ep0=contrast_matrix(1,count1)
@@ -3645,6 +3604,8 @@ implicit none
  H_0 = 0
  erre = 0
  re = 0
+ errh = 0
+ rh = 0
  do count1=1,ntarg
   if (location_targs(count1).eq.0) then
     call fieldsEDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
@@ -3661,6 +3622,14 @@ implicit none
      &+abs(E_0(2,count1)-E_far(2,count1))**2+abs(E_0(3,count1)-E_far(3,count1))**2)
     error_rel_E(count1)=error_E(count1)/sqrt(abs(E_0(1,count1))**2&
      &+abs(E_0(2,count1))**2+abs(E_0(3,count1))**2)
+    write(32,*) count1,error_E(count1),location_targs(count1),targ(1,count1), &
+      targ(2,count1),targ(3,count1)
+    write(132,*) count1,real(E_0(1,count1)),imag(E_0(1,count1)), &
+      real(E_0(2,count1)),imag(E_0(2,count1)),real(E_0(3,count1)), &
+      imag(E_0(3,count1))
+    write(232,*) count1,real(E_far(1,count1)),imag(E_far(1,count1)), &
+      real(E_far(2,count1)),imag(E_far(2,count1)),real(E_far(3,count1)), &
+      imag(E_far(3,count1))
 
     error_H(count1)=sqrt(abs(H_0(1,count1)-H_far(1,count1))**2+&
      &abs(H_0(2,count1)-H_far(2,count1))**2+abs(H_0(3,count1)-H_far(3,count1))**2)

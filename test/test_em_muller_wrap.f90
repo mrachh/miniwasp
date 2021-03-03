@@ -32,17 +32,20 @@
       dP(1,1) = 0
       dP(2,1) = 0
       dP(3,1) = 0
-      dP(4,1) = 1.1d0
+      dP(4,1) = 1.0d0
 
-!      string1 = '../geometries/simplest_cube_quadratic_v4_o08_r02.go3?'
-      string1 = '../geometries/lens_r01.go3?'
+      string1 = '../geometries/simplest_cube_quadratic_v4_o04_r00.go3?'
+      string1 = '../geometries/sphere_r02_o03.go3?'
+!      string1 = '../geometries/lens_r01.go3?'
 
 !       estimate number of discretization points      
       call em_solver_wrap_mem(string1,n_components,npatches,npts)
+      call prinf('npathces=*',npatches,1)
 
       omega = 2.0d0*pi/3600
+      omega = 1.1d0
       icase = 1
-      eps = 0.51d-3
+      eps = 0.51d-6
       eps_gmres = 0.51d-6
       allocate(soln(4*npts))
 !
@@ -55,7 +58,12 @@
       err_est = 0
       call em_solver_wrap(string1,n_components,dP,contrast_matrix,npts,&
         omega,icase,direction,pol,eps,eps_gmres,soln,err_est)
+      call prin2('soln=*',soln,24)
+      call prin2('soln 2=*',soln(npts+1),24)
+      call prin2('soln 3=*',soln(2*npts+1),24)
+      call prin2('soln 4=*',soln(3*npts+1),24)
       call prin2('estimated error=*',err_est,1)
+      stop
 !
 !  Now do the same computation using the postprocessing routine
 !  and getting the analytic solution
@@ -138,6 +146,7 @@
 
       call em_solver_wrap_postproc(string1,n_components,dP, &
         contrast_matrix,npts,omega,eps,soln,ntarg,targs,E,H)
+      
 
 
       call em_sol_exact(string1,n_components,dP, &

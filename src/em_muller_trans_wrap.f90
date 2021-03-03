@@ -376,6 +376,7 @@
       call get_bsize(12,npts,srcvals,3,nt,tmp,bsize)
 
       rsc = 1.0d0/bsize
+      rsc = 1.0d0
       
       do i=1,npts
         do j=1,9
@@ -412,10 +413,12 @@
       xyz_in(2) = ya
       xyz_in(3) = za
 
+      call prin2('xyz_in=*',xyz_in,3)
 
-      vf(1)=1.0d0*1.0d-3
-      vf(2)=2.0d0*1.0d-3
-      vf(3)=3.0d0*1.0d-3
+
+      vf(1)=1.0d0*1.0d0
+      vf(2)=2.0d0*1.0d0
+      vf(3)=3.0d0*1.0d0
 
       if(icase.eq.1) then
         call get_rhs_em_muller_trans_testing(xyz_in,vf, &
@@ -450,7 +453,6 @@
         soln(i) = 0
       enddo
 
-
       call cpu_time(t1)
 !C$      t1 = omp_get_wtime()    
       call em_muller_trans_v2_solver(npatches,norders,ixyzs,iptype, &
@@ -462,7 +464,6 @@
       call prin2('errs=*',errs,niter)
       call cpu_time(t2)
 !C$       t2 = omp_get_wtime()
-
 !
 !  if computing pw soln return 
 ! 
@@ -510,6 +511,9 @@
          icount=icount+1
        enddo
       enddo
+
+      ntarg = 1
+      targs(1:3,1) = targs(1:3,48)*0.99d0
 
       err_est = 0
       call test_accuracy_em_muller(npatches,norders,ixyzs, &
@@ -654,6 +658,7 @@
       call get_bsize(12,npts,srcvals,3,nt,tmp,bsize)
 
       rsc = 1.0d0/bsize
+      rsc = 1.0d0
       
       do i=1,npts
         do j=1,9
@@ -867,9 +872,9 @@
       xyz_in(3) = za
 
 
-      vf(1)=1.0d0*1.0d-3
-      vf(2)=2.0d0*1.0d-3
-      vf(3)=3.0d0*1.0d-3
+      vf(1)=1.0d0*1.0d0
+      vf(2)=2.0d0*1.0d0
+      vf(3)=3.0d0*1.0d0
 
       
       call evaluate_field_muller_exact(npatches,norders,ixyzs,iptype, &

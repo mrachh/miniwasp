@@ -512,6 +512,7 @@ implicit none
     &srcvals,3,ntarg,targ,&
     &ipatch_id,uvs_targ,eps,dpars,&
     &sigma,pot)
+
 !
 !
 !
@@ -561,7 +562,7 @@ implicit none
   rr=mod(xx,dd)
   if (rr.eq.1) then
     d(count1)=.true.
-    else
+  else
     d(count1)=.false.
   endif
   xx=xx/2
