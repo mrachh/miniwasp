@@ -3622,14 +3622,17 @@ implicit none
      &+abs(E_0(2,count1)-E_far(2,count1))**2+abs(E_0(3,count1)-E_far(3,count1))**2)
     error_rel_E(count1)=error_E(count1)/sqrt(abs(E_0(1,count1))**2&
      &+abs(E_0(2,count1))**2+abs(E_0(3,count1))**2)
+
+    if(count1.lt.10) then 
     write(32,*) count1,error_E(count1),location_targs(count1),targ(1,count1), &
       targ(2,count1),targ(3,count1)
-    write(132,*) count1,real(E_0(1,count1)),imag(E_0(1,count1)), &
-      real(E_0(2,count1)),imag(E_0(2,count1)),real(E_0(3,count1)), &
-      imag(E_0(3,count1))
-    write(232,*) count1,real(E_far(1,count1)),imag(E_far(1,count1)), &
-      real(E_far(2,count1)),imag(E_far(2,count1)),real(E_far(3,count1)), &
-      imag(E_far(3,count1))
+    write(132,*) count1,real(E_0(1,count1)),real(E_far(1,count1))
+    write(132,*) count1,imag(E_0(1,count1)),imag(E_far(1,count1))
+    write(132,*) count1,real(E_0(2,count1)),real(E_far(2,count1))
+    write(132,*) count1,imag(E_0(2,count1)),imag(E_far(2,count1))
+    write(132,*) count1,real(E_0(3,count1)),real(E_far(3,count1))
+    write(132,*) count1,imag(E_0(3,count1)),imag(E_far(3,count1))
+    endif
 
     error_H(count1)=sqrt(abs(H_0(1,count1)-H_far(1,count1))**2+&
      &abs(H_0(2,count1)-H_far(2,count1))**2+abs(H_0(3,count1)-H_far(3,count1))**2)

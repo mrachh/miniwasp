@@ -463,6 +463,23 @@
       call prin2('rres=*',rres,1)
       call prin2('errs=*',errs,niter)
       call cpu_time(t2)
+      stop
+
+      do i=1,4*npts
+        write(34,*) real(rhs(i)),imag(rhs(i))
+        write(35,*) real(soln(i)),imag(soln(i))
+      enddo
+      
+
+      call surf_vtk_plot_zvec_uv(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,soln,'avecr2.vtk','aveci2.vtk')
+      call surf_vtk_plot_zvec_uv(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,soln(2*npts+1),'bvecr2.vtk','bveci2.vtk')
+      call surf_vtk_plot_zvec_uv(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,rhs,'erhsr2.vtk','erhsi2.vtk')
+      call surf_vtk_plot_zvec_uv(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,rhs(2*npts+1),'hrhsr2.vtk','hrhsi2.vtk')
+
 !C$       t2 = omp_get_wtime()
 !
 !  if computing pw soln return 
@@ -885,3 +902,84 @@
 
       return
       end subroutine em_sol_exact
+!
+!
+!
+!
+!
+
+      subroutine surf_vtk_plot_zvec_uv(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,zdat,fname1,fname2)
+!
+!   This subroutine is a wrapper for plotting complex vector fields
+!   on surface where the data is provided as projections onto an orthogonal
+!   u,v frame on each patch. The orthogonal frame is constructed via
+!   dxyz/du, normals, dxyz/du \times normals
+!
+!   Input arguments
+!      - npatches: integer
+!          number of patches
+!      - norders: integer(npatches)
+!          order of discretization of each patch
+!      - ixyzs: integer(npatches+1)
+!          starting location of points on patch i
+!      - iptype: integer(npatches)
+!          type of patch
+!          iptype = 1, triangle discretized using RV nodes
+!      - npts: integer
+!          total number of points on the surface
+!      - srccoefs: double precision (9,npts)
+!          koornwinder expansion coefs of geometry info
+!      - srcvals: double precision (12,npts)
+!          xyz, dxyz/du,dxyz/dv, normals at all nodes
+!      - zdat: complex *16 (2,npts)
+!          complex vector field specified as projections onto
+!          orthonormal frame srcvals(4:6,i), srcvals(10:12,i),
+!          and the cross product
+!      - fname1: vtk file for writing the real part of vector field 
+!      - fname2: vtk file for writing the imag part of vector field
+      implicit real *8 (a-h,o-z)
+      integer, intent(in) :: npatches,npts
+      integer, intent(in) :: norders(npatches),ixyzs(npathces+1)
+      integer, intent(in) :: iptype(npatches)
+      real *8, intent(in) :: srcvals(12,npts),srccoefs(9,npts)
+      complex *16, intent(in) :: zdat(2*npts)
+      character (len=*), intent(in) :: fname1,fname2
+      real *8, allocatable :: uvec(:,:),vvec(:,:),sigma(:,:)
+      real *8, allocatable :: utmp(:,:),vtmp(:,:)
+
+      allocate(uvec(3,npts),vvec(3,npts),sigma(3,npts))
+      allocate(utmp(3,npts),vtmp(3,npts))
+
+      do i=1,npts
+        utmp(1,i) = srcvals(4,i)
+        utmp(2,i) = srcvals(5,i)
+        utmp(3,i) = srcvals(6,i)
+
+        vtmp(1,i) = srcvals(10,i)
+        vtmp(2,i) = srcvals(11,i)
+        vtmp(3,i) = srcvals(12,i)
+      enddo
+      call orthonormalize_all(utmp,vtmp,uvec,vvec,npts)
+
+      do i=1,npts
+        sigma(1,i) = real(zdat(i))*uvec(1,i) + real(zdat(i+npts))*vvec(1,i)
+        sigma(2,i) = real(zdat(i))*uvec(2,i) + real(zdat(i+npts))*vvec(2,i)
+        sigma(3,i) = real(zdat(i))*uvec(3,i) + real(zdat(i+npts))*vvec(3,i)
+      enddo
+
+      call surf_vtk_plot_vec(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,sigma,fname1,'a')
+
+      do i=1,npts
+        sigma(1,i) = imag(zdat(i))*uvec(1,i) + imag(zdat(i+npts))*vvec(1,i)
+        sigma(2,i) = imag(zdat(i))*uvec(2,i) + imag(zdat(i+npts))*vvec(2,i)
+        sigma(3,i) = imag(zdat(i))*uvec(3,i) + imag(zdat(i+npts))*vvec(3,i)
+      enddo
+
+      call surf_vtk_plot_vec(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,sigma,fname2,'a')
+
+
+      return
+      end subroutine surf_vtk_plot_zvec_uv
