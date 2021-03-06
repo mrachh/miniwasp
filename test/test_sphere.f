@@ -22,22 +22,28 @@
 
       complex *16 contrast_matrix(4,1)
       real *8, allocatable :: srcvals_extended(:,:)
-      complex *16 omega,ep,mu,ep1,mu1
+      complex *16 omega,ep,mu,ep1,mu1,ep0,mu0
       complex *16, allocatable :: rhs_muller(:)
       complex *16, allocatable :: soln_muller(:)
       real *8, allocatable :: dxyzdu(:,:),dxyzdv(:,:)
 
       real *8, allocatable :: cms(:,:),rads(:),rad_near(:),errs(:)
+      real *8, allocatable :: srcover(:,:),wover(:)
 
       integer, allocatable :: col_ptr(:),row_ind(:)
       integer, allocatable :: ixyzso(:),novers(:)
       integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
 
-      complex *16, allocatable :: ecomp(:,:),eex(:,:)
+      complex *16, allocatable :: ecomp(:,:),eex(:,:),hcomp(:,:)
+      complex *16, allocatable :: h_ex(:,:)
+      complex *16, allocatable :: pot1(:),pot2(:),pot3(:)
 
       complex *16 zalpha,zbeta,zgamma,zdelta,zeta,zteta,zk,ztetap
+      complex *16 zk0
       complex *16 ztetam
       complex *16 fjvals(0:100),fhvals(0:100),fjder(0:100),fhder(0:100)
+      complex *16 fjvals0(0:100),fhvals0(0:100)
+      complex *16 fjder0(0:100),fhder0(0:100)
       complex *16 fjvalst(0:100),fhvalst(0:100)
       complex *16 fjdert(0:100),fhdert(0:100)
       complex *16 z1,z2,z3,z4
@@ -72,10 +78,10 @@
 
 
       igeomtype = 1
-      ipars(1) = 2 
+      ipars(1) = 3 
       npatches=12*(4**ipars(1))
 
-      norder = 5 
+      norder = 3 
       npols = (norder+1)*(norder+2)/2
 
       npts = npatches*npols
@@ -116,23 +122,35 @@ c
       contrast_matrix(1,1)=1.1d0  
       contrast_matrix(2,1)=1.1d0  
       contrast_matrix(3,1)=1.2d0  
-      contrast_matrix(4,1)=1.0d0  
+      contrast_matrix(4,1)=1.0d0
 
       omega = 1.0d0
+      ep0 = contrast_matrix(1,1)
+      mu0 = contrast_matrix(2,1)
       ep = contrast_matrix(3,1)
       mu = contrast_matrix(4,1)
 c
 c  interior wave number
 c
       zk = omega*sqrt(ep)*sqrt(mu)
+      zk0 = omega*sqrt(ep0)*sqrt(mu0)
+
+      call prin2('zk=*',zk,2)
+      call prin2('zk0=*',zk0,2)
 
 
-      njh = 5
+      njh = 30
       ifder = 1
       rscale = 1.0d0
       call prin2('zk=*',zk,2)
       call besseljs3d(njh,zk,rscale,fjvals,ifder,fjder)
       call h3dall(njh,zk,rscale,fhvals,ifder,fhder)
+
+      call besseljs3d(njh,zk0,rscale,fjvals0,ifder,fjder0)
+      call h3dall(njh,zk0,rscale,fhvals0,ifder,fhder0)
+      call prin2('fjvals=*',fjvals,2*njh)
+      call prin2('fjvals=*',fjvals0,2*njh)
+
 
 
       allocate(dfuv(2,npts))
@@ -147,6 +165,8 @@ c
      1     dfuv(2,i)*srcvals(7:9,i) 
         call dzcross_prod3d(srcvals(10,i),psinm(1,i),phinm(1,i))
       enddo
+cc      call l3getsph_vec(mm,nn,12,npts,srcvals,vynm,psinm,
+cc     1   phinm)
 
       call prin2('psinm=*',psinm,24)
       call prin2('phinm=*',phinm,24)
@@ -161,32 +181,62 @@ c
         dvec2(2) = srcvals(11,i)
         dvec2(3) = srcvals(12,i)
 
+        dxyzdu(1:3,i) = 0
+        dxyzdv(1:3,i) = 0
+
         call orthonormalize(dvec1,dvec2,dxyzdu(1,i),dxyzdv(1,i))
+
       enddo
+      call prin2('dxyzdu=*',dxyzdu,6)
+      call prin2('dxyzdv=*',dxyzdv,6)
 
 c
 c  get boundary data
 c
 c
       allocate(rhs_muller(4*npts),soln_muller(4*npts))
+      call prin2('omega=*',omega,2)
+      call prin2('ep=*',ep,2)
+      call prin2('ep0=*',ep0,2)
+      call prin2('mu=*',mu,2)
+      call prin2('mu0=*',mu0,2)
+      call prin2('zk=*',zk,2)
+      call prin2('zk0=*',zk0,2)
+      call prinf('nn=*',nn,1)
+      z1 = ima*mu0*(fjvals0(nn) + zk0*fjder0(nn))*zk0*fhvals0(nn) 
+      z1 = z1-ima*mu*fjvals(nn)*zk*(fhvals(nn)+fhder(nn)*zk)
+      z1 = z1/(mu+mu0)
+
+      z2=zk0*(fjvals0(nn)+fjder0(nn)*zk0)*(fhvals0(nn)+fhder0(nn)*zk0)
+      z2=z2-zk*(fjvals(nn)+fjder(nn)*zk)*(fhvals(nn)+fhder(nn)*zk)
+      z2 = z2/omega/(ep+ep0)
+      print *, "z1=",z1
+      print *, "z2=",z2
       do i=1,npts
-        z1 = -ima*mu*fjvals(nn)*zk*(fhvals(nn)+fhder(nn)*zk)
-        z2 = zk/omega*(fjvals(nn) + fjder(nn)*zk)*
-     1      (fhvals(nn)+fhder(nn)*zk)
+
         rhs_muller(i) = z1*(dxyzdu(1,i)*psinm(1,i) + 
      1      dxyzdu(2,i)*psinm(2,i) + dxyzdu(3,i)*psinm(3,i))
+
+
         rhs_muller(i+npts) = z1*(dxyzdv(1,i)*psinm(1,i) + 
      1      dxyzdv(2,i)*psinm(2,i) + dxyzdv(3,i)*psinm(3,i))
-        rhs_muller(i+2*npts) = z2*(dxyzdu(1,i)*psinm(1,i) + 
-     1      dxyzdu(2,i)*psinm(2,i) + dxyzdu(3,i)*psinm(3,i))
-        rhs_muller(i+3*npts) = z2*(dxyzdv(1,i)*psinm(1,i) + 
-     1      dxyzdv(2,i)*psinm(2,i) + dxyzdv(3,i)*psinm(3,i))
+
+        rhs_muller(i+2*npts) = z2*(dxyzdu(1,i)*phinm(1,i) + 
+     1      dxyzdu(2,i)*phinm(2,i) + dxyzdu(3,i)*phinm(3,i))
+        rhs_muller(i+3*npts) = z2*(dxyzdv(1,i)*phinm(1,i) + 
+     1      dxyzdv(2,i)*phinm(2,i) + dxyzdv(3,i)*phinm(3,i))
       enddo
+
+      ra = 0
+      do i=1,npts
+        ra = ra + wts(i)
+      enddo
+      call prin2('error in surfce area=*',ra-4*pi,1)
 c
 c  find topological sorting
 c
 c
-      eps = 1.0d-6
+      eps = 1.0d-7
       n_components = 1
       call topological_sorting(npatches,norders,ixyzs,iptype,npts,
      1  srccoefs,srcvals,wts,npatches,n_components,sorted_vector,
@@ -198,149 +248,205 @@ c
 
       call build_extended_targ(n_components,srcvals_extended,
      1  srcvals,npts,contrast_matrix,npts)
+      call prin2('srcvals_extended=*',srcvals_extended,20)
+      call prin2('srcvals=*',srcvals,20)
+
+c
+c  test self near quadrature to ensure correct boundary
+c  data is generated
+c
+c
+      allocate(ipatch_id(npts),uvs_targ(2,npts))
+      call get_patch_id_uvs(npatches,norders,ixyzs,iptype,npts,
+     1  ipatch_id,uvs_targ)
+
+      iptype_avg = 1
+      norder_avg = norder
+      call get_rfacs(norder_avg,iptype,rfac,rfac0)
+      allocate(cms(3,npatches),rads(npatches),rad_near(npatches))
+      call get_centroid_rads(npatches,norders,ixyzs,iptype,npts,
+     1  srccoefs,cms,rads)
       
+      do i=1,npatches
+        rad_near(i) = rads(i)*rfac
+c        rad_near(i) = 3.0d0
+      enddo
+
+      call findnearmem(cms,npatches,rad_near,12,srcvals,npts,nnz)
+      allocate(row_ptr(npts+1),col_ind(nnz))
+      call findnear(cms,npatches,rad_near,12,srcvals,npts,row_ptr,
+     1  col_ind)
+      allocate(novers(npatches),ixyzso(npatches+1))
+      ikerorder = 0
+      call get_far_order(eps,npatches,norders,ixyzs,iptype,cms,
+     1 rads,npts,srccoefs,12,npts,srcvals,ikerorder,omega,
+     2 nnz,row_ptr,col_ind,rfac,novers,ixyzso)
+cc      do i=1,npatches
+cc        novers(i) = norder+2
+cc        npols0 = (novers(i)+1)*(novers(i)+2)/2
+cc        ixyzso(i) = (i-1)*npols0+1
+cc      enddo
+cc      ixyzso(npatches+1) = npatches*npols0+1 
+
+      npts_over = ixyzso(npatches+1)-1
+      allocate(srcover(12,npts_over),wover(npts_over))
+      call oversample_geom(npatches,norders,ixyzs,iptype,npts,
+     1  srccoefs,srcvals,novers,ixyzso,npts_over,srcover)
+      
+      call get_qwts(npatches,novers,ixyzso,iptype,npts_over,
+     1 srcover,wover)
+
+      allocate(iquad(nnz+1))
+      call get_iquad_rsc(npatches,ixyzs,npts,nnz,row_ptr,col_ind, 
+     1  iquad)
+      nquad = iquad(nnz+1)-1
+      
+      allocate(wnear(nquad,16))
+      iquadtype = 1
+      wnear = 0
+      goto 1111
+      call getnearquad_em_muller_trans_v2(npatches,norders,
+     1  ixyzs,iptype,npts,srccoefs,srcvals,20,npts,srcvals_extended,
+     2  ipatch_id,uvs_targ,eps,omega,iquadtype,nnz,row_ptr,col_ind,
+     3  iquad,rfac0,nquad,wnear)
+ 1111 continue     
+      call prinf('nnz=*',nnz,1)
+      call prin2('eps=*',eps,1)
+      call prinf('row_ptr=*',row_ptr,20)
+      call prin2('wnear=*',wnear(1,4),24)
+
+c
+c   set boundary data
+c 
+      allocate(pot1(4*npts),pot2(4*npts))
+      do i=1,4*npts
+        pot1(i) = 0
+        pot2(i) = 0
+      enddo
+
+      do i=1,npts
+        pot1(i) = psinm(1,i)*dxyzdu(1,i) + psinm(2,i)*dxyzdu(2,i) + 
+     1      psinm(3,i)*dxyzdu(3,i)
+        pot1(i+npts) = psinm(1,i)*dxyzdv(1,i)+psinm(2,i)*dxyzdv(2,i) + 
+     1      psinm(3,i)*dxyzdv(3,i)
+      enddo
+      call prin2('pot1=*',pot1,24)
+
+
+      call lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,
+     1   iptype,npts,srccoefs,srcvals,12,npts,srcvals,eps,omega,
+     2   nnz,row_ptr,col_ind,iquad,nquad,pot1,novers,npts_over,
+     3   ixyzso,srcover,wover,pot2,wnear,n_components,
+     4   contrast_matrix,npts)
+      
+
+      call prin2('pot2=*',pot2(2*npts+1),24)
+c
+c
+c  test accuracy of pot2, first test eletric field
+c
+      erra = 0
+      ra = 0
+      do j=1,4
+        istart = (j-1)*npts
+        do ii=1,npts
+          i = istart+ii
+          pot2(i) = pot2(i) + 0.5d0*pot1(i)
+          erra = erra + abs(rhs_muller(i)-pot2(i))**2*wts(ii)
+          ra = ra + abs(rhs_muller(i))**2*wts(ii)
+        enddo
+      enddo
+
+      call prin2('pot2=*',pot2,24)
+      call prin2('rhs_muller=*',rhs_muller,24)
+      erra = sqrt(erra/ra)
+      call prin2('erra in e dot ru=*',erra,1)
+
+
+
 
       numit = 200
       allocate(errs(numit+1))
-      eps_gmres = 1.0d-12
+      eps_gmres = 1.0d-10
+
+      do i=1,4*npts
+        soln_muller(i)=0
+      enddo
+      goto 1211
       call em_muller_trans_v2_solver(npatches,norders,ixyzs,iptype,
      1  npts,srccoefs,srcvals,eps,omega,numit,ifinout,rhs_muller,
      2  eps_gmres,niter,errs,rres,soln_muller,contrast_matrix,
      3  npts,n_components,srcvals_extended)
       
-
+      call prin2('soln_muller=*',soln_muller,24)
+      call prin2('soln_muller2=*',soln_muller(npts+1),24)
+      call prin2('soln_muller3=*',soln_muller(2*npts+1),24)
+      call prin2('soln_muller4=*',soln_muller(3*npts+1),24)
       erra = 0
       ra = 0
       do i=1,npts
-        zvec1(1:3) = soln_muller(i)*dxyzdu(1:3,i) + 
-     1     soln_muller(i+npts)*dxyzdv(1:3,i)
+        zvec1(1:3) = (soln_muller(i)*dxyzdu(1:3,i) + 
+     1     soln_muller(i+npts)*dxyzdv(1:3,i))
         erra = erra + abs(psinm(1,i) - zvec1(1))**2*wts(i)
         erra = erra + abs(psinm(2,i) - zvec1(2))**2*wts(i)
         erra = erra + abs(psinm(3,i) - zvec1(3))**2*wts(i)
         ra = ra + abs(psinm(1,i))**2*wts(i)
+
+        if(i.lt.5) then
+          call prin2('zvec=*',zvec1,6)
+          call prin2('psinm=*',psinm(1,i),6)
+          print *, psinm(1,i)/zvec1(1)
+        endif
       enddo
 
       erra = sqrt(erra/ra)
       call prin2('error in soln=*',erra,1)
-      stop
+
+c
+c  now test target evaluator
+c
+c
+ 1211 continue
       
+      if(1.eq.1) then   
+        do i=1,4*npts
+         soln_muller(i) = 0
+        enddo
 
-      
-c
-c       precompute near quadrature correction
-c
-c
-      iptype_avg = floor(sum(iptype)/(npatches+0.0d0))
-      norder_avg = floor(sum(norders)/(npatches+0.0d0))
+        do i=1,npts
+          soln_muller(i) = psinm(1,i)*dxyzdu(1,i) + 
+     1                     psinm(2,i)*dxyzdu(2,i) + 
+     1                     psinm(3,i)*dxyzdu(3,i)  
 
-      call get_rfacs(norder_avg,iptype_avg,rfac,rfac0)
+          soln_muller(i+npts) = psinm(1,i)*dxyzdv(1,i) + 
+     1                     psinm(2,i)*dxyzdv(2,i) + 
+     1                     psinm(3,i)*dxyzdv(3,i)  
 
-
-      ntarg = 1
+        enddo
+      endif
+      ntarg = 20
       allocate(targs(3,ntarg))
-      allocate(ipatch_id(ntarg),uvs_targ(2,ntarg))
       do i=1,ntarg
         r = hkrand(0)*0.8d0
         thet = hkrand(0)*pi
         phi = hkrand(0)*2*pi
 
-        r = 0.99999d0
+        r = 0.9999d0
 
         targs(1,i) = r*sin(thet)*cos(phi)
         targs(2,i) = r*sin(thet)*sin(phi)
         targs(3,i) = r*cos(thet)
 
-        ipatch_id(i) = -1
-        uvs_targ(1,i) = 0
-        uvs_targ(2,i) = 0
-      enddo
-C$OMP END PARALLEL DO      
-
-      nnz = ntarg*npatches
-      allocate(row_ptr(ntarg+1),col_ind(nnz))
-
-      do i=1,ntarg
-        row_ptr(i) = (i-1)*npatches + 1
-        do j=1,npatches
-          col_ind(row_ptr(i)+j-1) = j
-        enddo
-      enddo
-      row_ptr(ntarg+1) = ntarg*npatches+1
-      allocate(iquad(nnz+1))
-      call prinf('npatches=*',npatches,1)
-      call prinf('ntarg=*',ntarg,1)
-      call prinf('nnz=*',nnz,1)
-      
-      call get_iquad_rsc(npatches,ixyzs,ntarg,nnz,row_ptr,col_ind,
-     1         iquad)
-
-      nquad = iquad(nnz+1)-1
-
-
-      allocate(wnear(nquad,3))
-      
-      do j=1,3
-C$OMP PARALLEL DO DEFAULT(SHARED)      
-        do i=1,nquad
-          wnear(i,j) = 0
-        enddo
-      enddo
-C$OMP END PARALLEL DO    
-
-      iquadtype = 1
-      ndz = 1
-      ndi = 0
-      ndd = 0
-
-      ipv = 1
-      
-      fker => h3d_sgradx
-      call zgetnearquad_ggq_guru(npatches,norders,ixyzs,iptype,
-     1  npts,srccoefs,srcvals,3,ntarg,targs,ipatch_id,uvs_targ,eps,
-     2  ipv,fker,ndd,dpars,ndz,zk,ndi,ipars,nnz,row_ptr,col_ind,iquad,
-     3  rfac0,nquad,wnear(1,1))
-
-      fker => h3d_sgrady
-      call zgetnearquad_ggq_guru(npatches,norders,ixyzs,iptype,
-     1  npts,srccoefs,srcvals,3,ntarg,targs,ipatch_id,uvs_targ,eps,
-     2  ipv,fker,ndd,dpars,ndz,zk,ndi,ipars,nnz,row_ptr,col_ind,iquad,
-     3  rfac0,nquad,wnear(1,2))
-
-      fker => h3d_sgradz
-      call zgetnearquad_ggq_guru(npatches,norders,ixyzs,iptype,
-     1  npts,srccoefs,srcvals,3,ntarg,targs,ipatch_id,uvs_targ,eps,
-     2  ipv,fker,ndd,dpars,ndz,zk,ndi,ipars,nnz,row_ptr,col_ind,iquad,
-     3  rfac0,nquad,wnear(1,3))
-      
-
-      allocate(eex(3,ntarg),ecomp(3,ntarg))
-
-c
-c  test \nabla \times s[psinm]
-c
-      do i=1,ntarg
-        ecomp(1:3,i) = 0
-        do j=row_ptr(i),row_ptr(i+1)-1
-          jpatch = col_ind(j)
-          npols = ixyzs(jpatch+1)-ixyzs(jpatch)
-          jquadstart = iquad(j)
-          jstart = ixyzs(jpatch)
-          do l=1,npols
-            ecomp(1,i) = ecomp(1,i) + 
-     1         wnear(jquadstart+l-1,2)*psinm(3,jstart+l-1) - 
-     2         wnear(jquadstart+l-1,3)*psinm(2,jstart+l-1)
-            ecomp(2,i) = ecomp(2,i) + 
-     1         wnear(jquadstart+l-1,3)*psinm(1,jstart+l-1) - 
-     2         wnear(jquadstart+l-1,1)*psinm(3,jstart+l-1)
-            ecomp(3,i) = ecomp(3,i) + 
-     1         wnear(jquadstart+l-1,1)*psinm(2,jstart+l-1) - 
-     2         wnear(jquadstart+l-1,2)*psinm(1,jstart+l-1)
-          enddo
-        enddo
       enddo
 
-cc      call prin2('ecomp=*',ecomp,6*ntarg)
+      allocate(eex(3,ntarg),ecomp(3,ntarg),hcomp(3,ntarg))
+      allocate(h_ex(3,ntarg))
+      call prin2('soln_muller=*',soln_muller,24)
 
+      call evaluate_field_muller(npatches,norders,ixyzs,iptype,
+     1  npts,srccoefs,srcvals,wts,targs,ntarg,npatches,n_components,
+     2  sorted_vector,contrast_matrix,exposed_surfaces,eps,omega,
+     3  soln_muller,ecomp,hcomp)
 
       allocate(vynm_targ(3,ntarg),phinm_targ(3,ntarg))
       allocate(psinm_targ(3,ntarg))
@@ -349,70 +455,52 @@ cc      call prin2('ecomp=*',ecomp,6*ntarg)
       call l3getsph_vec(mm,nn,3,ntarg,targs,vynm_targ,psinm_targ,
      1   phinm_targ)
 
-cc      call prin2('zk=*',zk,1)
       erra = 0
       ra = 0
+
+      erra2 = 0
+      ra2 = 0
       do i=1,ntarg
         r = sqrt(targs(1,i)**2 + targs(2,i)**2 + targs(3,i)**2)
         z1 = zk*r
         call besseljs3d(njh,z1,rscale,fjvalst,ifder,fjdert)
-        z2 = -ima*fjvalst(nn)*zk*(zk*fhder(nn)+fhvals(nn))
+        z2 = -ima*fjvalst(nn)*zk*(zk*fhder(nn)+fhvals(nn))*mu
         eex(1:3,i) = phinm_targ(1:3,i)*z2
-        erra = erra + abs(eex(1,i)-ecomp(1,i))**2
-        erra = erra + abs(eex(2,i)-ecomp(2,i))**2
-        erra = erra + abs(eex(3,i)-ecomp(3,i))**2
-        ra = ra + abs(eex(1,i))**2
-        ra = ra + abs(eex(2,i))**2
-        ra = ra + abs(eex(3,i))**2
-      enddo
 
-      erra = sqrt(erra/ra)
-      call prin2('error in curl S[\psinm]=*',erra,1)
-
-c
-c  test \nabla \times s[phinm]
-c
-      do i=1,ntarg
-        ecomp(1:3,i) = 0
-        do j=row_ptr(i),row_ptr(i+1)-1
-          jpatch = col_ind(j)
-          npols = ixyzs(jpatch+1)-ixyzs(jpatch)
-          jquadstart = iquad(j)
-          jstart = ixyzs(jpatch)
-          do l=1,npols
-            ecomp(1,i) = ecomp(1,i) + 
-     1         wnear(jquadstart+l-1,2)*phinm(3,jstart+l-1) - 
-     2         wnear(jquadstart+l-1,3)*phinm(2,jstart+l-1)
-            ecomp(2,i) = ecomp(2,i) + 
-     1         wnear(jquadstart+l-1,3)*phinm(1,jstart+l-1) - 
-     2         wnear(jquadstart+l-1,1)*phinm(3,jstart+l-1)
-            ecomp(3,i) = ecomp(3,i) + 
-     1         wnear(jquadstart+l-1,1)*phinm(2,jstart+l-1) - 
-     2         wnear(jquadstart+l-1,2)*phinm(1,jstart+l-1)
-          enddo
-        enddo
-      enddo
-
-      erra = 0
-      ra = 0
-      do i=1,ntarg
-        r = sqrt(targs(1,i)**2 + targs(2,i)**2 + targs(3,i)**2)
         z1 = zk*r
         call besseljs3d(njh,z1,rscale,fjvalst,ifder,fjdert)
-        z2 = -ima*nn*(nn+1.0d0)*zk*fhvals(nn)*fjvalst(nn)/r
-        z3 = -ima*fhvals(nn)*(zk**2*fjdert(nn) + fjvalst(nn)*zk/r)
-        eex(1:3,i) = psinm_targ(1:3,i)*z3 + vynm_targ(1:3,i)*z2
-        erra = erra + abs(eex(1,i)-ecomp(1,i))**2
-        erra = erra + abs(eex(2,i)-ecomp(2,i))**2
-        erra = erra + abs(eex(3,i)-ecomp(3,i))**2
-        ra = ra + abs(eex(1,i))**2
-        ra = ra + abs(eex(2,i))**2
-        ra = ra + abs(eex(3,i))**2
+        z2 = ima*nn*(nn+1.0d0)*zk*fjvalst(nn)/r*(fhvals(nn) +
+     1       zk*fhder(nn))/ima/omega
+        z3 = ima*(zk**2*fjdert(nn) + fjvalst(nn)*zk/r)*(fhvals(nn) + 
+     1       zk*fhder(nn))/ima/omega
+        h_ex(1:3,i) = psinm_targ(1:3,i)*z3 + vynm_targ(1:3,i)*z2
+        erra = erra + abs(h_ex(1,i)-hcomp(1,i))**2
+        erra = erra + abs(h_ex(2,i)-hcomp(2,i))**2
+        erra = erra + abs(h_ex(3,i)-hcomp(3,i))**2
+        ra = ra + abs(h_ex(1,i))**2
+        ra = ra + abs(h_ex(2,i))**2
+        ra = ra + abs(h_ex(3,i))**2
+
+        erra2 = erra2 + abs(eex(1,i)-ecomp(1,i))**2
+        erra2 = erra2 + abs(eex(2,i)-ecomp(2,i))**2
+        erra2 = erra2 + abs(eex(3,i)-ecomp(3,i))**2
+        ra2 = ra2 + abs(eex(1,i))**2
+        ra2 = ra2 + abs(eex(2,i))**2
+        ra2 = ra2 + abs(eex(3,i))**2
       enddo
+      call prin2('ecomp=*',ecomp,6)
+      call prin2('eex=*',eex,6)
 
       erra = sqrt(erra/ra)
-      call prin2('error in curl S[\phinm]=*',erra,1)
+      erra2 = sqrt(erra2/ra2)
+      call prin2('erra=*',erra,1)
+      call prin2('ra=*',sqrt(ra),1)
+      call prin2('error in H=*',erra,1)
 
+      call prin2('error in E=*',erra2,1)
+
+c
+      
 
 
       stop

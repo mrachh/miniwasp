@@ -449,6 +449,8 @@
 
       real *8, allocatable :: sources(:,:),targvals(:,:),wtmp2(:)
       complex *16, allocatable :: charges(:),dipvec(:,:),sigmaover(:)
+      complex *16, allocatable :: sigmatmp(:,:),sigmaovertmp(:,:)
+      real *8 dvec1(3),dvec2(3),dvec3(3),dvec4(3)
       integer ns,nt
       complex *16 alpha,beta
       integer ifcharge,ifdipole
@@ -506,23 +508,78 @@
       allocate(sigmaover(4*ns))
       allocate(pot_aux(4*ntarg))
 
+      print *, "npts=",npts
+      print *, "ntarg=",ntarg
+
+
+      if(1.eq.0) then
+        allocate(sigmatmp(3,ntarg),sigmaovertmp(3,ns))
+
+        do i=1,npts
+          dvec1(1:3) = srcvals(4:6,i)
+          dvec2(1:3) = srcvals(10:12,i)
+          call orthonormalize(dvec1,dvec2,dvec3,dvec4)
+          sigmatmp(1:3,i) = sigma(i)*dvec3(1:3) + sigma(i+npts)*dvec4(1:3)
+        enddo
+        print *, "Before oversample"
+        call oversample_fun_surf(6,npatches,norders,ixyzs,iptype, &
+         npts,sigmatmp,novers,ixyzso,ns,sigmaovertmp)
+        print *, "after oversampling"
+        do i=1,ns
+          dvec1(1:3) = srcover(4:6,i)
+          dvec2(1:3) = srcover(10:12,i)
+          call orthonormalize(dvec1,dvec2,dvec3,dvec4)
+          sigmaover(i) = sigmaovertmp(1,i)*dvec3(1) + &
+            sigmaovertmp(2,i)*dvec3(2) + &
+            sigmaovertmp(3,i)*dvec3(3)
+          sigmaover(i+ns) = sigmaovertmp(1,i)*dvec4(1) + &
+            sigmaovertmp(2,i)*dvec4(2) + &
+            sigmaovertmp(3,i)*dvec4(3)
+        enddo
+
+        do i=1,npts
+          dvec1(1:3) = srcvals(4:6,i)
+          dvec2(1:3) = srcvals(10:12,i)
+          call orthonormalize(dvec1,dvec2,dvec3,dvec4)
+          sigmatmp(1:3,i) = sigma(i+2*npts)*dvec3(1:3) + &
+            sigma(i+3*npts)*dvec4(1:3)
+        enddo
+        print *, "Here"
+        call oversample_fun_surf(6,npatches,norders,ixyzs,iptype, &
+         npts,sigmatmp,novers,ixyzso,ns,sigmaovertmp)
+        do i=1,ns
+          dvec1(1:3) = srcover(4:6,i)
+          dvec2(1:3) = srcover(10:12,i)
+          call orthonormalize(dvec1,dvec2,dvec3,dvec4)
+          sigmaover(i+2*ns) = sigmaovertmp(1,i)*dvec3(1) + &
+            sigmaovertmp(2,i)*dvec3(2) + &
+            sigmaovertmp(3,i)*dvec3(3)
+          sigmaover(i+3*ns) = sigmaovertmp(1,i)*dvec4(1) + &
+            sigmaovertmp(2,i)*dvec4(2) + &
+            sigmaovertmp(3,i)*dvec4(3)
+        enddo
+      else
+
+
+
 ! 
 !       oversample density
 
-      call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
-        &npts,sigma(1:npts),novers,ixyzso,ns,sigmaover(1:ns))
+        call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
+          &npts,sigma(1:npts),novers,ixyzso,ns,sigmaover(1:ns))
        
-      call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
-        &npts,sigma(npts+1:2*npts),novers,ixyzso,ns, & 
-        &sigmaover(ns+1:2*ns))
+        call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
+          &npts,sigma(npts+1:2*npts),novers,ixyzso,ns, & 
+          &sigmaover(ns+1:2*ns))
 
-      call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
-        &npts,sigma(2*npts+1:3*npts),novers,ixyzso,ns, &
-        &sigmaover(2*ns+1:3*ns))
+        call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
+          &npts,sigma(2*npts+1:3*npts),novers,ixyzso,ns, &
+          &sigmaover(2*ns+1:3*ns))
 
-      call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
-        &npts,sigma(3*npts+1:4*npts),novers,ixyzso,ns, &
-        &sigmaover(3*ns+1:4*ns))
+        call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
+          &npts,sigma(3*npts+1:4*npts),novers,ixyzso,ns, &
+          &sigmaover(3*ns+1:4*ns))
+      endif
 
 
 !
@@ -548,7 +605,7 @@
         zpars_aux(4)=contrast_matrix(3,count1)
         zpars_aux(5)=contrast_matrix(4,count1)
 
-!   Calculate the far_field with FMM		
+!   Calculate the far_field with FMM	
         call em_muller_trans_FMM(eps,zpars_aux,ns,npts_vect(count1),&
         &srcover,targs(:,istart:ifinish),whtsover,&
         &sigmaover(1:ns),sigmaover(ns+1:2*ns),sigmaover(2*ns+1:3*ns),&
@@ -626,6 +683,7 @@
               wtmp2(ii)=whtsover(jstart+l)
             enddo
           enddo
+          E = 0
           call em_muller_trans_FMM(eps,zpars_aux,nss,ntarg0,&
             &srctmp2,targs(:,i),wtmp2,ctmp2_a_u,ctmp2_a_v,&
             &ctmp2_b_u,ctmp2_b_v,E(1),E(2),E(3),E(4),thresh,ifdir)
@@ -2352,7 +2410,7 @@ implicit none
  integer, intent(in) :: norders(npatches),npatches_vect(n_components),ixyzs(npatches+1),iptype(npatches)
  real ( kind = 8 ), intent(in) :: srcvals(12,npts), srccoefs(9,npts),targ(3,ntarg),wts(npts)
  integer, intent(in) :: sorted_vector(n_components+1)
- complex ( kind = 8 ), intent(in) :: contrast_matrix(4,n_components),zpars(3),sigma(4*npts)
+ complex ( kind = 8 ), intent(in) :: contrast_matrix(4,n_components),zpars(1),sigma(4*npts)
  logical exposed_surfaces(n_components)
  real ( kind = 8 ), intent(in) :: eps
  complex ( kind = 8 ), intent(out) :: E_far(3,ntarg),H_far(3,ntarg)

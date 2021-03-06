@@ -36,14 +36,16 @@
 
 !      string1 = '../geometries/simplest_cube_quadratic_v4_o08_r02.go3?'
       string1 = '../geometries/lens_r01.go3?'
+      string1 = '../geometries/sphere_r02_o03.go3?'
 
 !       estimate number of discretization points      
       call em_solver_wrap_mem(string1,n_components,npatches,npts)
 
       omega = 2.0d0*pi/3600
+      omega = 1.0d0
       icase = 1
-      eps = 0.51d-3
-      eps_gmres = 0.51d-6
+      eps = 0.51d-6
+      eps_gmres = 0.51d-8
       allocate(soln(4*npts))
 !
 !  run the solver
