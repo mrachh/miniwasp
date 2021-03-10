@@ -23,5 +23,5 @@ To build the python interface, run `make python`. For a simple demo of
 the user callable routines of this library see `python\example1.py`.
 
 The documentation of the python routines can be found
-[here](https://miniwaspbie.readthedocs.io/en/latest)
+[here](https://miniwasp.readthedocs.io/en/latest/)
 
