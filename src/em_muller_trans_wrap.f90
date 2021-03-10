@@ -457,9 +457,6 @@
         npts,srccoefs,srcvals,eps,zpars,numit,ifinout,rhs,eps_gmres, &
         niter,errs,rres,soln,contrast_matrix,npts_vect, &
         n_components,srcvals_extended)
-      call prinf('niter=*',niter,1)
-      call prin2('rres=*',rres,1)
-      call prin2('errs=*',errs,niter)
       call cpu_time(t2)
 !C$       t2 = omp_get_wtime()
 

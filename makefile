@@ -83,7 +83,7 @@ default: usage
 usage:
 	@echo "-------------------------------------------------------------------------"
 	@echo "Makefile for miniwasp. Specify what to make:"
-	@echo "  
+	@echo " " 
 	@echo "  make lib - compile the main library (in lib/ and lib-static/)"
 	@echo "  make test - compile and run validation tests (will take around 30 secs)"
 	@echo "  make test-dyn - test successful installation by validation tests linked to dynamic library (will take a couple of mins)"
