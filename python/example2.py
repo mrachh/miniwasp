@@ -32,7 +32,7 @@ dP[3,0] = 1.0
 # the units of prescribed geometry
 
 # currently set to wave length of green light*6 (for faster run time)
-omega = np.pi*2/3600.0
+omega = np.pi*2/300.0
 
 # set material parameters on either side of each component
 contrast_matrix = np.zeros((4,n_components),order="F",dtype="complex")
