@@ -508,8 +508,6 @@
       allocate(sigmaover(4*ns))
       allocate(pot_aux(4*ntarg))
 
-      print *, "npts=",npts
-      print *, "ntarg=",ntarg
 
 
       if(1.eq.0) then

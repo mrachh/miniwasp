@@ -4,7 +4,7 @@ import numpy as np
 import mwaspbie as mw
 
 # Define geometry and number of components
-string1 = '../geometries/lens_r00.go3?'
+string1 = '../geometries/lens_r01.go3?'
 n_components = 1
 
 # compute number of patches and points
@@ -54,8 +54,16 @@ sorted_vector,exposed_surfaces] = mw.em_solver_open_geom(string1,dP,npatches,
 
 
 #
+#  Set points per wavelength in each direction 
+#  for target grid
+#
+ppw = 5
+
+
+#
 # create target grid
 #
+
 xmin = np.min(srcvals[0,:])
 xmax = np.max(srcvals[0,:])
 
@@ -69,17 +77,22 @@ dx = xmax-xmin
 dy = ymax-ymin
 dz = zmax-zmin
 
+# determine grid spacing to get the correct 
+# resolution in each dimension of target grid
+nx = int(np.ceil((xmax-xmin)*omega/2/np.pi*ppw))
+ny = int(np.ceil((ymax-ymin)*omega/2/np.pi*ppw))
+nz = int(np.ceil((zmax-zmin)*omega/2/np.pi*ppw))
 
-nn = 20
-xs = np.linspace(xmin+0.1*dx,xmax-0.1*dx,nn)
-ys = np.linspace(ymin+0.1*dy,ymax-0.1*dy,nn)
-xx,yy = np.meshgrid(xs,ys)
+xs = np.linspace(xmin+0.1*dx,xmax-0.1*dx,nx)
+ys = np.linspace(ymin+0.1*dy,ymax-0.1*dy,ny)
+zs = np.linspace(zmin+0.1*dz,zmax-0.1*dz,nz)
+xx,yy,zz = np.meshgrid(xs,ys,zs)
 
-nt = nn*nn
+nt = nx*ny*nz
 targs = np.zeros((3,nt),order="F")
 targs[0,:] = xx.reshape(nt)
 targs[1,:] = yy.reshape(nt)
-targs[2,:] = 0.5*(zmin+zmax)
+targs[2,:] = zz.reshape(nt) 
 #
 # Compute fields at targets using computed surface currents
 #
