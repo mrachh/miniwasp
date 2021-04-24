@@ -25,12 +25,14 @@ mwasp.append('em_solver_open_geom')
 mwasp.append('em_solver_wrap')
 mwasp.append('em_solver_wrap_postproc')
 mwasp.append('em_sol_exact')
+mwasp.append('em_plot_surf_current_vtk')
 
 
 ext_helm = Extension(
     name='mwaspbie',
     sources=list_files,
     f2py_options=['only:']+mwasp+[':'],
+    extra_f90_compile_args=["-std=legacy"],
     extra_link_args=FLIBS
 )
 

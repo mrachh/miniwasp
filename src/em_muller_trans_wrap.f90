@@ -46,6 +46,9 @@
 !    em_sol_exact - computes the exact solution used in the analytic
 !    test in em_solver_wrap. 
 !
+!
+!    em_plot_surf_current_vtk - plots the surface current 
+!    along with the mesh
 
 
       subroutine em_solver_wrap_mem(string0,n_components,npatches,npts)
@@ -877,3 +880,54 @@
 
       return
       end subroutine em_sol_exact
+!
+!
+!
+!
+!
+!
+      subroutine em_plot_surf_current_vtk(npatches,norders,ixyzs, &
+        iptype,npts,srccoefs,srcvals,soln,ifjk,fname,title)
+!
+!f2py intent(in) npatches,norders,ixyzs,iptype,npts,srccoefs
+!f2py intent(in) srcvals,soln,ifjk,fname,title
+!
+!   This subroutine writes a vtk to plot the surface along
+!   with a tangential vector field prescribed through its projection
+!   onto X_{u}, X_{v}. 
+!   Currently only supports triangular patches
+!
+!
+      implicit none
+      integer, intent(in) :: npatches,norders(npatches),ixyzs(npatches+1),npts
+      integer, intent(in) :: iptype(npatches),ifjk
+      real *8, intent(in) :: srccoefs(9,npts),srcvals(12,npts)
+      complex *16, intent(in) :: soln(4*npts)
+      character (len=*), intent(in) :: fname,title
+      complex *16, allocatable :: sigma(:,:)
+      real *8, allocatable :: u_vect_s(:,:),v_vect_s(:,:)
+      integer i
+
+      allocate(sigma(3,npts),u_vect_s(3,npts),v_vect_s(3,npts))
+      call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:),u_vect_s, &
+         v_vect_s,npts)
+
+      if(ifjk.eq.1) then
+        do i=1,npts
+          sigma(1:3,i) = soln(i)*u_vect_s(1:3,i) + &
+            soln(i+npts)*v_vect_s(1:3,i)
+        enddo
+      else
+        do i=1,npts
+          sigma(1:3,i) = soln(i+2*npts)*u_vect_s(1:3,i) + &
+            soln(i+3*npts)*v_vect_s(1:3,i)
+        enddo
+      endif
+
+      call surf_vtk_plot_zvec(npatches,norders,ixyzs,iptype,npts, &
+        srccoefs,srcvals,sigma,fname,title)
+
+
+      end subroutine em_plot_surf_current_vtk
+!
+!
