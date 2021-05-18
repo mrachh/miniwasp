@@ -942,7 +942,7 @@
 !
 !
 !
-      subroutine em_gen_plot_info_surf_mem(string0,n_components,
+      subroutine em_gen_plot_info_surf_mem(string0,n_components, &
         nverts,nel)
 !
 !f2py intent(in) string0,n_components
@@ -970,9 +970,9 @@
       character (len=2000) :: string1
       integer ll
       integer, intent(in) :: n_components
-      integer, intent(out) :: npts,npatches
+      integer, intent(out) :: nverts,nel 
       integer, allocatable :: iwords(:)
-      integer i,n0,n1,iunit
+      integer i,n0,n1,iunit,io,ierror
       character (len=1000) :: fname1
       character (len=1000) :: cline
       
@@ -982,10 +982,12 @@
       call text_process(string1,n_components,iwords)
       iunit = 899
       
-      npts = 0
-      npatches = 0
+      nverts = 0
+      nel = 0
       do i=1,n_components
         fname1 = trim(string1(iwords(i)+1:iwords(i+1)-1))
+        call prinf('i=*',i,1)
+        call prinf('n_components=*',n_components,1)
 
         n0 = 0
         n1 = 0
@@ -1000,12 +1002,14 @@
             read(iunit,*) ll,n0,ll,ll
           endif
 
-          if (trim(cline.eq. '$Elements') then
+          if (trim(cline).eq. '$Elements') then
             read(iunit,*) ll,n1,ll,ll 
           endif
 
           if(n0*n1>0) exit
         enddo
+        print *, i, n0,n1
+        
 
         close(iunit)
         nverts = nverts + n0
@@ -1019,3 +1023,173 @@
 !
 !
 !
+!
+      subroutine em_gen_plot_info_surf(string0,n_components, &
+        nverts,verts,nel,elements)
+!
+!f2py intent(in) string0,n_components,nverts,nel
+!f2py intent(out) verts,elements
+!
+!  This subroutine estimates the number of points 
+!  for the given string defining the geometry
+!  described through the .msh files and not the
+!  .go3 files
+!
+!  Input arguments:
+!    - string0: character(len=*)
+!        string defining the go3 files
+!    - n_components: integer
+!        number of components
+!    - nverts: integer
+!        number of vertices
+!    - nel: integer
+!        number of elements
+!    
+!  Output arguments:
+!    - verts: real *8 (3,nverts)
+!        xyz coordinates of vertices
+!    - elements: integer (3,nel)
+!        indices of vertices which form various triangles
+!
+      implicit none
+      character (len=*), intent(in) :: string0
+      character (len=2000) :: string1
+      integer ll
+      integer, intent(in) :: n_components,nverts,nel
+      integer, intent(out) :: elements(3,nel)
+      real *8, intent(out) :: verts(3,nverts)
+      integer, allocatable :: iwords(:)
+      integer i,n0,n1,iunit,io,ierror,nv,ne,j,k,l
+      character (len=1000) :: fname1
+      character (len=1000) :: cline,cline2
+      
+      ll = len(string0)
+      string1(1:ll) = string0
+      allocate(iwords(n_components+1))
+      call text_process(string1,n_components,iwords)
+      iunit = 899
+      
+      nv = 0
+      ne = 0
+      do i=1,n_components
+        fname1 = trim(string1(iwords(i)+1:iwords(i+1)-1))
+        call prinf('i=*',i,1)
+        call prinf('n_components=*',n_components,1)
+
+        n0 = 0
+        n1 = 0
+
+        open(unit=iunit,file=trim(fname1),status='old', &
+          action='read',iostat =ierror)
+        do
+          read(iunit,*,iostat=io) cline
+          if(io.ne.0) exit
+
+          if (trim(cline).eq.'$Nodes') then
+            read(iunit,*) ll,n0,ll,ll
+            read(iunit,*) cline2
+            do j=1,n0
+              read(iunit,*) ll
+            enddo
+            do j=1,n0
+              read(iunit,*) verts(1,nv+j),verts(2,nv+j),verts(3,nv+j)
+            enddo
+          endif
+
+          if (trim(cline).eq. '$Elements') then
+            read(iunit,*) ll,n1,ll,ll
+            read(iunit,*) cline2
+            do j=1,n1
+              read(iunit,*) ll,elements(1,ne+j),elements(2,ne+j), &
+                elements(3,ne+j)
+              elements(1,ne+j) = elements(1,ne+j) + nv
+              elements(2,ne+j) = elements(2,ne+j) + nv
+              elements(3,ne+j) = elements(3,ne+j) + nv
+            enddo
+          endif
+
+          if(n0*n1>0) exit
+        enddo
+        print *, i, n0,n1
+        
+
+        close(iunit)
+        nv = nv + n0
+        ne = ne + n1
+      enddo
+
+      return
+      end subroutine em_gen_plot_info_surf
+!
+!
+!
+!
+!
+      subroutine em_elem_trans(nel,nverts,elements,iver_el_list, &
+        iverstart,iverind)
+!
+!  This subroutine transposes the list of vertices which form the
+!  flat triangles to a list of flat triangles that meet at a vertex
+!
+!  Input arguments:
+!    * nel: integer
+!        number of flat triangles
+!    * nverts: integer
+!        number of vertices
+!    * elements: integer(3,nel)
+!        List of vertices which describe each flat triangle
+!
+!  Output arguments:
+!    * iver_el_list: integer(3*nel)
+!        List of flat triangles present at the collection of vertices.
+!        Relevant list of elements for vertex 1 stored first,
+!        followed by relevant list of elements for vertex 2 and
+!        so on and so forth
+!    * iverstart: integer(nverts+1)
+!        iverstart(i):iverstart(i+1)-1 is the list of indices 
+!        in the iver_el_list array which contains the set
+!        of flat triangles which meet at vertex i
+!    * iverind: integer(3*nel)
+!         for the vertex element pair, i,iver_el_list(j), iverind(j)
+!         stores which of the three vertices (0,0),(1,0), or (0,1)
+!         corresponded to vertex i
+!
+!
+!
+      implicit none
+      integer, intent(in) :: nel,nverts,elements(3,nel)
+      integer, intent(out) :: iver_el_list(3*nel),iverstart(nverts+1)
+      integer, intent(out) :: iverind(3*nel)
+      integer, allocatable :: iper(:),ielstart(:)
+      integer i,j,k,l,iel
+
+      allocate(iper(3*nel),ielstart(nel+1))
+      do i=1,nel+1
+        ielstart(i) = (i-1)*3+1
+      enddo
+
+      call rsc_to_csc(nverts,nel,3*nel,ielstart,elements, &
+        iverstart,iver_el_list,iper)
+
+
+      do i=1,nverts
+        do j=iverstart(i),iverstart(i+1)-1
+          iel = iver_el_list(j)
+          do l=1,3
+            if(elements(l,iel).eq.i) iverind(j) = l
+          enddo
+        enddo
+      enddo
+
+      end subroutine em_elem_trans
+!
+!
+!
+!
+!
+!      subroutine em_surf_fun_to_plot_fun(nd,npatches,norders,ixyzs, &
+!        iptype,npts,fvals,nverts,nel,iver_el_list,iverstart,iverind, &
+!        fvalsout)
+      
+
+!      end subroutine em_surf_fun_to_plot_fun
