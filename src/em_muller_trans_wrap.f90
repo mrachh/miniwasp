@@ -49,6 +49,15 @@
 !
 !    em_plot_surf_current_vtk - plots the surface current 
 !    along with the mesh
+!
+!
+!    em_gen_plot_info_surf_mem - memory estimation 
+!    routine for em_gen_plot_info_surf
+!
+!    em_gen_plot_info_surf - generate the plotting info needed
+!    for the surf. Note the input must be a string 
+!    consisting of the original .msh formats and not the
+!    .go3 files
 
 
       subroutine em_solver_wrap_mem(string0,n_components,npatches,npts)
@@ -929,5 +938,84 @@
 
 
       end subroutine em_plot_surf_current_vtk
+!
+!
+!
+!
+      subroutine em_gen_plot_info_surf_mem(string0,n_components,
+        nverts,nel)
+!
+!f2py intent(in) string0,n_components
+!f2py intent(out) nverts,nel
+!
+!  This subroutine estimates the number of points 
+!  for the given string defining the geometry
+!  described through the .msh files and not the
+!  .go3 files
+!
+!  Input arguments:
+!    - string0: character(len=*)
+!      string defining the go3 files
+!    - n_components: integer
+!      number of components
+!    
+!  Output arguments:
+!    - nverts: integer
+!        number of vertices
+!    - nel: integer
+!        number of elements
+!
+      implicit none
+      character (len=*), intent(in) :: string0
+      character (len=2000) :: string1
+      integer ll
+      integer, intent(in) :: n_components
+      integer, intent(out) :: npts,npatches
+      integer, allocatable :: iwords(:)
+      integer i,n0,n1,iunit
+      character (len=1000) :: fname1
+      character (len=1000) :: cline
+      
+      ll = len(string0)
+      string1(1:ll) = string0
+      allocate(iwords(n_components+1))
+      call text_process(string1,n_components,iwords)
+      iunit = 899
+      
+      npts = 0
+      npatches = 0
+      do i=1,n_components
+        fname1 = trim(string1(iwords(i)+1:iwords(i+1)-1))
+
+        n0 = 0
+        n1 = 0
+
+        open(unit=iunit,file=trim(fname1),status='old', &
+          action='read',iostat =ierror)
+        do
+          read(iunit,*,iostat=io) cline
+          if(io.ne.0) exit
+
+          if (trim(cline).eq.'$Nodes') then
+            read(iunit,*) ll,n0,ll,ll
+          endif
+
+          if (trim(cline.eq. '$Elements') then
+            read(iunit,*) ll,n1,ll,ll 
+          endif
+
+          if(n0*n1>0) exit
+        enddo
+
+        close(iunit)
+        nverts = nverts + n0
+        nel = nel + n1
+      enddo
+
+      return
+      end subroutine em_gen_plot_info_surf_mem
+!
+!
+!
 !
 !
