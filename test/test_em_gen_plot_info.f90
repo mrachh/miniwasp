@@ -17,6 +17,7 @@
       logical, allocatable :: exposed_surfaces(:)
       real *8, allocatable :: fvals(:,:),fvalsout(:,:)
       integer, allocatable :: iver_el_list(:),iverstart(:),iverind(:)
+      real *8, allocatable :: rscales(:)
       complex *16 pol(2)
       complex *16 ima
       data ima/(0.0d0,1.0d0)/
@@ -106,10 +107,30 @@
       enddo
 
       call prinf('npatches=*',npatches,1)
+
+      allocate(rscales(nel))
+      do i=1,nel
+        rscales(i) = 1.0d0
+      enddo
       
-!      call em_surf_fun_to_plot_fun(nd,npatches,norders,ixyzs,&
-!        iptype,npts,fvals, &
-!        nverts,nel,iver_el_list,iverstart,iverind,fvalsout)
+      call em_surf_fun_to_plot_fun(nd,npatches,norders,ixyzs,&
+        iptype,npts,fvals, &
+        nverts,nel,iver_el_list,iverstart,iverind,rscales,fvalsout)
+!
+!
+!  estimate error by comparing to actual vertices
+!
+!
+      erra = 0
+      ra = 0
+      do i=1,nverts
+        do j=1,3
+          erra = erra + (verts(j,i)-fvalsout(j,i))**2
+          ra = ra + verts(j,i)**2
+        enddo
+      enddo
+      erra = sqrt(erra/ra)
+      call prin2('error in vertices=*',erra,1)
 
 
       stop
