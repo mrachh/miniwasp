@@ -489,7 +489,7 @@
       complex *16 omega,ep0,mu0,ep1,mu1
 
       integer nd,ntarg0
-      integer icount
+      integer icount,nmax
 
       real *8 ttot,done,pi
 
@@ -604,7 +604,7 @@
         zpars_aux(5)=contrast_matrix(4,count1)
 
 !   Calculate the far_field with FMM	
-        call em_muller_trans_FMM(eps,zpars_aux,ns,npts_vect(count1),&
+        call em_muller_trans_FMM2(eps,zpars_aux,ns,npts_vect(count1),&
         &srcover,targs(:,istart:ifinish),whtsover,&
         &sigmaover(1:ns),sigmaover(ns+1:2*ns),sigmaover(2*ns+1:3*ns),&
         &sigmaover(3*ns+1:4*ns),pot_aux(istart:ifinish),&
@@ -623,6 +623,9 @@
 !
 !
       call cpu_time(t1)
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch) &
+!$OMP&PRIVATE(npols,jquadstart,jstart,l,count1,count2) &
+!$OMP&PRIVATE(icomp)
       do i=1,ntarg
         do j=row_ptr(i),row_ptr(i+1)-1
           jpatch = col_ind(j)
@@ -641,31 +644,43 @@
           enddo
         enddo
       enddo
+!$OMP END PARALLEL DO      
 
 !
 !
 !  subtract near quadrature from oversampled sources directly 
 !
 !
+      nmax = 0  
+      call get_near_corr_max(ntarg,row_ptr,nnz,col_ind,npatches, &
+        ixyzso,nmax)
+      nss = nmax
+      allocate(srctmp2(12,nss),wtmp2(nss))
+      allocate(ctmp2_a_u(nss),ctmp2_a_v(nss))
+      allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
+
+      nss = 0
+
+
       ifdir=1
-      i=0
+      istart=0
       do count1=1,n_components
         zpars_aux(1)=zpars(1)
         zpars_aux(2)=contrast_matrix(1,count1)
         zpars_aux(3)=contrast_matrix(2,count1)
         zpars_aux(4)=contrast_matrix(3,count1)
         zpars_aux(5)=contrast_matrix(4,count1)
+
+!OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,nss,j,jpatch) &
+!OMP& PRIVATE(ii,jstart,npover,l,srctmp2,ctmp2_a_u,ctmp2_a_v) &
+!OMP& PRIVATE(ctmp2_b_u,ctmp2_b_v,wtmp2,E)
         do count2=1,npts_vect(count1)
-          i=i+1
+          i=istart+ count2
           nss = 0
           do j=row_ptr(i),row_ptr(i+1)-1
             jpatch = col_ind(j)
             nss = nss + ixyzso(jpatch+1)-ixyzso(jpatch)
           enddo
-          allocate(srctmp2(12,nss),wtmp2(nss))
-          allocate(ctmp2_a_u(nss),ctmp2_a_v(nss))
-          allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
-
           ii = 0
           do j=row_ptr(i),row_ptr(i+1)-1
             jpatch = col_ind(j)
@@ -682,7 +697,7 @@
             enddo
           enddo
           E = 0
-          call em_muller_trans_FMM(eps,zpars_aux,nss,ntarg0,&
+          call em_muller_trans_FMM2(eps,zpars_aux,nss,ntarg0,&
             &srctmp2,targs(:,i),wtmp2,ctmp2_a_u,ctmp2_a_v,&
             &ctmp2_b_u,ctmp2_b_v,E(1),E(2),E(3),E(4),thresh,ifdir)
  
@@ -690,10 +705,10 @@
             pot_aux(i+j*ntarg) = pot_aux(i+j*ntarg) - E(j+1)
           enddo
 
-          deallocate(srctmp2,wtmp2)
-          deallocate(ctmp2_a_u,ctmp2_a_v,ctmp2_b_u,ctmp2_b_v)
-
         enddo
+!OMP END PARALLEL DO        
+
+        istart = istart + npts_vect(count1)
       enddo
 !
 !  End of subtracting near quadrautre from oversampled sources
@@ -709,20 +724,24 @@
 !
       omega = zpars(1)
 
-      i=0
+      istart=0
       do count1=1,n_components
         zpars_aux(1)=zpars(1)
         ep0=contrast_matrix(1,count1)
         mu0=contrast_matrix(2,count1)
         ep1=contrast_matrix(3,count1)
         mu1=contrast_matrix(4,count1)
+
+!OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
         do count2=1,npts_vect(count1)
-          i=i+1
+          i=istart+count2
           pot(i)=pot_aux(i)/(mu0+mu1)
           pot(i+ntarg)=pot_aux(i+ntarg)/(mu0+mu1)
           pot(i+2*ntarg)=pot_aux(i+2*ntarg)/(ep0+ep1)
           pot(i+3*ntarg)=pot_aux(i+3*ntarg)/(ep0+ep1)
         enddo
+!OMP END PARALLEL DO        
+        istart = istart + npts_vect(count1)
       enddo
   
   
@@ -907,7 +926,7 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       complex *16 zid,ztmp
       real *8 rb,wnrm2
       integer numit,it,iind,it1,k,l,count1
-      real *8 rmyerr
+      real *8 rmyerr,tt1,tt2
       complex *16 temp
       complex *16, allocatable :: vmat(:,:),hmat(:,:)
       complex *16, allocatable :: cs(:),sn(:)
@@ -963,6 +982,8 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       norder_avg = floor(sum(norders)/(npatches+0.0d0))
 
       call get_rfacs(norder_avg,iptype_avg,rfac,rfac0)
+      rfac = 4.0d0
+      print *, rfac, rfac0
 
 
       allocate(cms(3,npatches),rads(npatches),rad_near(npatches))
@@ -1008,6 +1029,9 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 
       npts_over = ixyzso(npatches+1)-1
       print *, "npts_over=",npts_over
+      print *, "npts=",npts
+      print *, "oversamp=",(npts_over+0.0d0)/npts
+
 
       allocate(srcover(12,npts_over),wover(npts_over))
 
@@ -1037,14 +1061,14 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 
       print *, "starting to generate near quadrature"
       call cpu_time(t1)
-!C$      t1 = omp_get_wtime()      
+!$      t1 = omp_get_wtime()      
       ndtarg=20
       call getnearquad_em_muller_trans_v2(npatches,norders,&
      &ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,npts,srcvals_extended,&
      &ipatch_id,uvs_targ,eps,zpars,iquadtype,nnz,row_ptr,col_ind,&
      &iquad,rfac0,nquad,wnear)
       call cpu_time(t2)
-!C$      t2 = omp_get_wtime()     
+!$      t2 = omp_get_wtime()     
 
       call prin2('quadrature generation time=*',t2-t1,1)
       print *, "done generating near quadrature, now starting gmres"
@@ -1089,13 +1113,16 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       do it=1,numit
         it1 = it + 1
 
-
+        call cpu_time(tt1)
+!$        tt1 = omp_get_wtime()  
         call lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,&
      &iptype,npts,srccoefs,srcvals,ndtarg,npts,targs,&
      &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,&
      &vmat(1,it),novers,npts_over,ixyzso,srcover,wover,wtmp,wnear,&
      &n_components,contrast_matrix,npts_vect)
-
+        call cpu_time(tt2)
+!$        tt2 = omp_get_wtime()  
+        print *, it,tt2-tt1
         do k=1,it
           hmat(k,it) = 0
           do j=1,n_var      
@@ -1275,19 +1302,24 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
 !
 !  Extract an orthonormal frame at each point for the source info
 !
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,ns
       n_vect_s(:,count1)=srcvals(10:12,count1)
       source(:,count1)=srcvals(1:3,count1)
     enddo
+!$OMP END PARALLEL DO    
     call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:),u_vect_s,&
        &v_vect_s,ns)
 !
 !  Extract an orthonormal frame at each point for the target info
 !
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       n_vect_t(:,count1)=targvals(10:12,count1)
       targets(:,count1)=targvals(1:3,count1)
     enddo
+!$OMP END PARALLEL DO    
     call orthonormalize_all(targvals(4:6,:),targvals(10:12,:),u_vect_t,&
       &v_vect_t,nt)
 
@@ -1295,6 +1327,8 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
 !  Set up densities for maxwell fmm
 !
 !
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,ns
       a_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1)+ &
          b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
@@ -1310,6 +1344,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       b_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1)+ & 
         a_v(count1)*v_vect_s(3,count1))*mu0
     enddo
+!$OMP END PARALLEL DO    
 
 !Computing the full operator
     ifa_vect=1
@@ -1324,6 +1359,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       &ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
       &curlE,ifdivE,divE,nt,targets,thresh,ifdir)
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       b_vect_t(1,count1)=n_vect_t(2,count1)*curlE(3,count1)- &
         n_vect_t(3,count1)*curlE(2,count1)
@@ -1332,7 +1368,10 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       b_vect_t(3,count1)=n_vect_t(1,count1)*curlE(2,count1)- &
         n_vect_t(2,count1)*curlE(1,count1)
     enddo
+!$OMP END PARALLEL DO
 
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       AA_u(count1)=b_vect_t(1,count1)*u_vect_t(1,count1) + &
           b_vect_t(2,count1)*u_vect_t(2,count1) + &
@@ -1341,7 +1380,9 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
         b_vect_t(2,count1)*v_vect_t(2,count1) + &
         b_vect_t(3,count1)*v_vect_t(3,count1)
     enddo
+!$OMP END PARALLEL DO
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,ns
       b_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1)+ &
         b_v(count1)*v_vect_s(1,count1))*ep0
@@ -1357,6 +1398,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       a_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1)+ &
         a_v(count1)*v_vect_s(3,count1))/(ima*omega)
     enddo
+!$OMP END PARALLEL DO    
 
     ifa_vect=1
     ifb_vect=1
@@ -1370,6 +1412,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
      &ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
      &curlE,ifdivE,divE,nt,targets,thresh,ifdir)
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       b_vect_t(1,count1)=n_vect_t(2,count1)*curlE(3,count1)-&
         n_vect_t(3,count1)*curlE(2,count1)
@@ -1378,7 +1421,9 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       b_vect_t(3,count1)=n_vect_t(1,count1)*curlE(2,count1)-&
         n_vect_t(2,count1)*curlE(1,count1)
     enddo
+!$OMP END PARALLEL DO
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       BB_u(count1)=b_vect_t(1,count1)*u_vect_t(1,count1) + &
         b_vect_t(2,count1)*u_vect_t(2,count1) + &
@@ -1387,11 +1432,13 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
         b_vect_t(2,count1)*v_vect_t(2,count1) + &
         b_vect_t(3,count1)*v_vect_t(3,count1)
     enddo
+!$OMP END PARALLEL DO    
 
 !
 ! now zk1
 !
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,ns
       a_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1) + &
         b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
@@ -1407,6 +1454,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       b_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
         a_v(count1)*v_vect_s(3,count1))*mu1
     enddo
+!$OMP END PARALLEL DO    
 
     ifa_vect=1
     ifb_vect=1
@@ -1421,6 +1469,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
      &curlE,ifdivE,divE,nt,targets,thresh,ifdir)
 
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       b_vect_t(1,count1)=n_vect_t(2,count1)*curlE(3,count1) - &
          n_vect_t(3,count1)*curlE(2,count1)
@@ -1429,7 +1478,9 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       b_vect_t(3,count1)=n_vect_t(1,count1)*curlE(2,count1) - &
           n_vect_t(2,count1)*curlE(1,count1)
     enddo
+!$OMP END PARALLEL DO    
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       AA_u(count1)=AA_u(count1)-(b_vect_t(1,count1)*u_vect_t(1,count1) + &
           b_vect_t(2,count1)*u_vect_t(2,count1) + &
@@ -1440,6 +1491,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
     enddo
 
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,ns
       b_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1) + &
         b_v(count1)*v_vect_s(1,count1))*ep1
@@ -1455,6 +1507,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       a_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
           a_v(count1)*v_vect_s(3,count1))/(ima*omega)
     enddo
+!$OMP END PARALLEL DO    
 
 
     ifa_vect=1
@@ -1469,6 +1522,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
      &ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
      &curlE,ifdivE,divE,nt,targets,thresh,ifdir)
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       b_vect_t(1,count1)=n_vect_t(2,count1)*curlE(3,count1) - &
         n_vect_t(3,count1)*curlE(2,count1)
@@ -1477,7 +1531,9 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
       b_vect_t(3,count1)=n_vect_t(1,count1)*curlE(2,count1) - &
           n_vect_t(2,count1)*curlE(1,count1)
     enddo
+!$OMP END PARALLEL DO    
 
+!$OMP PARALLEL DO DEFAULT(SHARED)
     do count1=1,nt
       BB_u(count1)=BB_u(count1)-(b_vect_t(1,count1)*u_vect_t(1,count1) + &
         b_vect_t(2,count1)*u_vect_t(2,count1) + &
@@ -1486,6 +1542,7 @@ subroutine em_muller_trans_FMM(eps,zpars,ns,nt,srcvals,targvals,wts,&
         b_vect_t(2,count1)*v_vect_t(2,count1) + &
         b_vect_t(3,count1)*v_vect_t(3,count1))
     enddo
+!$OMP END PARALLEL DO    
 
 
     deallocate(a_vect,b_vect,b_vect_t,lambda,rho,E,curlE,divE)
@@ -1584,29 +1641,29 @@ subroutine 	get_rhs_em_muller_trans_PW(direction,Pol,srcvals,omega,RHS,&
  &n_components,npts_vect,contrast_matrix,ns,exposed_surfaces)
 implicit none
 
-	!List of calling arguments
-  integer, intent(in) :: n_components,ns
-  integer, intent(in) :: npts_vect(n_components)
-  complex (kind = 8 ), intent(in) :: contrast_matrix(4,n_components)
+    !List of calling arguments
+    integer, intent(in) :: n_components,ns
+    integer, intent(in) :: npts_vect(n_components)
+    complex (kind = 8 ), intent(in) :: contrast_matrix(4,n_components)
 	real ( kind = 8 ), intent(in) :: direction(2)
-	complex ( kind = 8 ), intent(in) :: Pol(2)
+    complex ( kind = 8 ), intent(in) :: Pol(2)
 	real ( kind = 8 ), intent(in) :: srcvals(12,ns)
-  complex ( kind = 8 ), intent(in) :: omega
-	complex ( kind = 8 ), intent(out) :: RHS(4*ns)
-  logical, intent(in) :: exposed_surfaces(n_components)
-	
-	!List of local variables
-  complex ( kind = 8 ) ep0,mu0,ep1,mu1
-	complex ( kind = 8 ), allocatable :: E0(:,:), H0(:,:),E(:,:), H(:,:)
-	integer count1,count2,icount
-  real ( kind = 8 ), allocatable :: xyz_aux(:,:)
-	
+    complex ( kind = 8 ), intent(in) :: omega
+    complex ( kind = 8 ), intent(out) :: RHS(4*ns)
+     logical, intent(in) :: exposed_surfaces(n_components)
+
+   !List of local variables
+    complex ( kind = 8 ) ep0,mu0,ep1,mu1
+    complex ( kind = 8 ), allocatable :: E0(:,:), H0(:,:),E(:,:), H(:,:)
+    integer count1,count2,icount
+    real ( kind = 8 ), allocatable :: xyz_aux(:,:)
+ 
 	real ( kind = 8 ) ru(3),rv(3),cross_aux(3)
 
- 	allocate(E(3,ns), H(3,ns))
-	allocate(E0(3,ns), H0(3,ns))
-  allocate(xyz_aux(3,ns))
-		
+    allocate(E(3,ns), H(3,ns))
+    allocate(E0(3,ns), H0(3,ns))
+    allocate(xyz_aux(3,ns))
+
   do count1=1,n_components
     if (exposed_surfaces(count1)) then
         ep0=contrast_matrix(1,count1)
@@ -1631,8 +1688,8 @@ do count2=1,n_components
   mu0=contrast_matrix(2,count2)
   ep1=contrast_matrix(3,count2)
   mu1=contrast_matrix(4,count2)
-	do count1=1,npts_vect(count2)	
-		call orthonormalize(srcvals(4:6,icount),srcvals(10:12,icount),ru,rv)
+  do count1=1,npts_vect(count2)	
+    call orthonormalize(srcvals(4:6,icount),srcvals(10:12,icount),ru,rv)
     if (exposed_surfaces(count2)) then
       RHS(icount)=-DOT_PRODUCT(rv,E0(:,icount))
       RHS(ns+icount)=DOT_PRODUCT(ru,E0(:,icount))	
@@ -1648,7 +1705,8 @@ do count2=1,n_components
     RHS(icount+ns)=RHS(icount+ns)/(mu0+mu1)
     RHS(icount+2*ns)=RHS(icount+2*ns)/(ep0+ep1)
     RHS(icount+3*ns)=RHS(icount+3*ns)/(ep0+ep1)
-	enddo
+    icount = icount + 1
+  enddo
 enddo
 
 return
@@ -2123,23 +2181,23 @@ subroutine fieldsPWomega(omega,ep,mu,xyz,n,E,H,direction,Pol)
     phi=direction(1)
     theta=direction(2)
 
-	  zk=omega*sqrt(ep*mu)
+    zk=omega*sqrt(ep*mu)
     k_vect(1)=zk*cos(phi)*sin(theta)
     k_vect(2)=zk*sin(phi)*sin(theta)
     k_vect(3)=zk*cos(theta)
     E_phi=Pol(1)
     E_theta=Pol(2)
-	  eta=sqrt(mu/ep)
+    eta=sqrt(mu/ep)
     do i=1,n
       eprop=exp(ima*(k_vect(1)*xyz(1,i)+k_vect(2)*xyz(2,i)+k_vect(3)*xyz(3,i)))
-      E(1,i)=(E_theta*cos(theta)*cos(phi)-E_phi*sin(phi))*eprop;
-      E(2,i)=(E_theta*cos(theta)*sin(phi)+E_phi*cos(phi))*eprop;
-      E(3,i)=(-E_theta*sin(theta))*eprop;
+      E(1,i)=(E_theta*cos(theta)*cos(phi)-E_phi*sin(phi))*eprop
+      E(2,i)=(E_theta*cos(theta)*sin(phi)+E_phi*cos(phi))*eprop
+      E(3,i)=(-E_theta*sin(theta))*eprop
       H_phi=E_theta/eta
       H_theta=-E_phi/eta       
-      H(1,i)=(H_theta*cos(theta)*cos(phi)-H_phi*sin(phi))*eprop;
-      H(2,i)=(H_theta*cos(theta)*sin(phi)+H_phi*cos(phi))*eprop;
-      H(3,i)=(-H_theta*sin(theta))*eprop;
+      H(1,i)=(H_theta*cos(theta)*cos(phi)-H_phi*sin(phi))*eprop
+      H(2,i)=(H_theta*cos(theta)*sin(phi)+H_phi*cos(phi))*eprop
+      H(3,i)=(-H_theta*sin(theta))*eprop
     enddo
 
 return
@@ -2627,11 +2685,11 @@ end subroutine evaluate_field_muller
       call get_centroid_rads(npatches,norders,ixyzs,iptype,npts,& 
        &srccoefs,cms,rads)
 
-!C$OMP PARALLEL DO DEFAULT(SHARED) 
+!$OMP PARALLEL DO DEFAULT(SHARED) 
       do i=1,npatches
         rad_near(i) = rads(i)*rfac
       enddo
-!C$OMP END PARALLEL DO      
+!$OMP END PARALLEL DO      
 
 !c
 !c    find near quadrature correction interactions
@@ -3845,3 +3903,282 @@ implicit none
 return
 end subroutine evaluate_field_muller_exact 
 
+
+
+
+
+
+subroutine em_muller_trans_FMM2(eps,zpars,ns,nt,srcvals,targvals,wts,&
+ &a_u,a_v,b_u,b_v,AA_u,AA_v,BB_u,BB_v,thresh,ifdir)
+implicit none
+
+    !List of calling arguments
+    real ( kind = 8 ), intent(in) :: eps
+    complex ( kind = 8 ), intent(in) :: zpars(5)
+    integer, intent(in) :: ns,nt
+    real ( kind = 8 ), intent(in) :: srcvals(12,ns),wts(ns)
+    real ( kind = 8 ), intent(in) :: targvals(12,nt)
+    complex ( kind = 8 ), intent(in) :: a_u(ns),a_v(ns)
+    complex ( kind = 8 ), intent(in) :: b_u(ns),b_v(ns)
+    complex ( kind = 8 ), intent(out) :: AA_u(nt),AA_v(nt)
+    complex ( kind = 8 ), intent(out) :: BB_u(nt),BB_v(nt)
+    real ( kind = 8 ), intent(in) :: thresh
+    integer, intent(in) :: ifdir 
+
+
+    !List of local variables
+	  real ( kind = 8 ), allocatable :: u_vect_s(:,:),v_vect_s(:,:)
+	  real ( kind = 8 ), allocatable :: source(:,:),n_vect_s(:,:)
+
+	  real ( kind = 8 ), allocatable :: n_vect_t(:,:),u_vect_t(:,:)
+	  real ( kind = 8 ), allocatable :: targets(:,:),v_vect_t(:,:)
+
+    complex ( kind = 8 ), allocatable :: a_vect(:,:,:),b_vect(:,:,:)
+    complex ( kind = 8 ), allocatable :: b_vect_t(:,:,:)
+    complex ( kind = 8 ), allocatable :: lambda(:,:),rho(:,:)
+    complex ( kind = 8 ), allocatable :: E(:,:,:),curlE(:,:,:),divE(:,:)
+    complex ( kind = 8 ) ima,zk0,zk1
+
+    complex ( kind = 8 ) omega,ep0,mu0,ep1,mu1
+
+    integer count1,count2,nd
+    integer ifa_vect,ifb_vect,iflambda,ifrho,ifE,ifcurlE,ifdivE
+
+    ima=(0.0d0,1.0d0)
+
+    omega=zpars(1)
+    ep0=zpars(2)
+    mu0=zpars(3)
+    ep1=zpars(4)
+    mu1=zpars(5)
+
+    zk0=omega*sqrt(ep0*mu0)
+    zk1=omega*sqrt(ep1*mu1)
+
+    nd=2
+    allocate(a_vect(nd,3,ns))
+    allocate(b_vect(nd,3,ns))
+    allocate(b_vect_t(nd,3,nt))
+    allocate(lambda(nd,ns))
+    allocate(rho(nd,ns))
+    allocate(E(nd,3,nt))
+    allocate(curlE(nd,3,nt))
+    allocate(divE(nd,nt))
+    allocate(n_vect_s(3,ns))
+    allocate(u_vect_s(3,ns))
+    allocate(v_vect_s(3,ns))
+    allocate(n_vect_t(3,nt))
+    allocate(u_vect_t(3,nt))
+    allocate(v_vect_t(3,nt))
+    allocate(source(3,ns))
+    allocate(targets(3,nt))
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,ns
+      n_vect_s(:,count1)=srcvals(10:12,count1)
+      source(:,count1)=srcvals(1:3,count1)
+    enddo
+!$OMP END PARALLEL DO
+    call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:),u_vect_s,&
+       &v_vect_s,ns)
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,nt
+      n_vect_t(:,count1)=targvals(10:12,count1)
+      targets(:,count1)=targvals(1:3,count1)
+    enddo
+!$OMP END PARALLEL DO
+    call orthonormalize_all(targvals(4:6,:),targvals(10:12,:),u_vect_t,&
+        &v_vect_t,nt)
+
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,ns
+      a_vect(1,1,count1)=(b_u(count1)*u_vect_s(1,count1) + &
+         b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
+      a_vect(1,2,count1)=(b_u(count1)*u_vect_s(2,count1) + &
+         b_v(count1)*v_vect_s(2,count1))/(-ima*omega)
+      a_vect(1,3,count1)=(b_u(count1)*u_vect_s(3,count1) + &
+         b_v(count1)*v_vect_s(3,count1))/(-ima*omega)
+      b_vect(1,1,count1)=(a_u(count1)*u_vect_s(1,count1) + &
+        a_v(count1)*v_vect_s(1,count1))*mu0
+      b_vect(1,2,count1)=(a_u(count1)*u_vect_s(2,count1) + &
+        a_v(count1)*v_vect_s(2,count1))*mu0
+      b_vect(1,3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
+        a_v(count1)*v_vect_s(3,count1))*mu0
+
+
+      b_vect(2,1,count1)=(b_u(count1)*u_vect_s(1,count1) + &
+        b_v(count1)*v_vect_s(1,count1))*ep0
+      b_vect(2,2,count1)=(b_u(count1)*u_vect_s(2,count1) + &
+        b_v(count1)*v_vect_s(2,count1))*ep0
+      b_vect(2,3,count1)=(b_u(count1)*u_vect_s(3,count1) + &
+        b_v(count1)*v_vect_s(3,count1))*ep0
+
+      a_vect(2,1,count1)=(a_u(count1)*u_vect_s(1,count1) + &
+        a_v(count1)*v_vect_s(1,count1))/(ima*omega)
+      a_vect(2,2,count1)=(a_u(count1)*u_vect_s(2,count1) + &
+        a_v(count1)*v_vect_s(2,count1))/(ima*omega)
+      a_vect(2,3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
+        a_v(count1)*v_vect_s(3,count1))/(ima*omega)
+
+     enddo
+!$OMP END PARALLEL DO
+
+    !Computing the full operator
+    ifa_vect=1
+    ifb_vect=1
+    iflambda=0
+    ifrho=0
+    ifE=0
+    ifcurlE=1
+    ifdivE=0
+
+    call Vector_Helmholtz_targ2_vect(nd,eps,zk0,ns,source,wts, &
+      ifa_vect,a_vect,&
+      ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
+      curlE,ifdivE,divE,nt,targets,thresh,ifdir)
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,nt
+        b_vect_t(1,1,count1)=n_vect_t(2,count1)*curlE(1,3,count1)-&
+          n_vect_t(3,count1)*curlE(1,2,count1)
+        b_vect_t(1,2,count1)=n_vect_t(3,count1)*curlE(1,1,count1)-&
+          n_vect_t(1,count1)*curlE(1,3,count1)
+        b_vect_t(1,3,count1)=n_vect_t(1,count1)*curlE(1,2,count1)-&
+          n_vect_t(2,count1)*curlE(1,1,count1)
+
+        b_vect_t(2,1,count1)=n_vect_t(2,count1)*curlE(2,3,count1)-&
+          n_vect_t(3,count1)*curlE(2,2,count1)
+        b_vect_t(2,2,count1)=n_vect_t(3,count1)*curlE(2,1,count1)-&
+          n_vect_t(1,count1)*curlE(2,3,count1)
+        b_vect_t(2,3,count1)=n_vect_t(1,count1)*curlE(2,2,count1)-&
+          n_vect_t(2,count1)*curlE(2,1,count1)
+    enddo
+!$OMP END PARALLEL DO
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,nt
+      AA_u(count1)=b_vect_t(1,1,count1)*u_vect_t(1,count1) + &
+          b_vect_t(1,2,count1)*u_vect_t(2,count1) + &
+          b_vect_t(1,3,count1)*u_vect_t(3,count1)
+      AA_v(count1)=b_vect_t(1,1,count1)*v_vect_t(1,count1) + &
+          b_vect_t(1,2,count1)*v_vect_t(2,count1) +  &
+          b_vect_t(1,3,count1)*v_vect_t(3,count1)
+
+      BB_u(count1)=b_vect_t(2,1,count1)*u_vect_t(1,count1) + &
+          b_vect_t(2,2,count1)*u_vect_t(2,count1) + &
+          b_vect_t(2,3,count1)*u_vect_t(3,count1)
+      BB_v(count1)=b_vect_t(2,1,count1)*v_vect_t(1,count1) + &
+          b_vect_t(2,2,count1)*v_vect_t(2,count1) + &
+          b_vect_t(2,3,count1)*v_vect_t(3,count1)
+    enddo
+!$OMP END PARALLEL DO
+
+
+!!! now zk1
+
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,ns
+      a_vect(1,1,count1)=(b_u(count1)*u_vect_s(1,count1) + &
+         b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
+      a_vect(1,2,count1)=(b_u(count1)*u_vect_s(2,count1) + &
+         b_v(count1)*v_vect_s(2,count1))/(-ima*omega)
+      a_vect(1,3,count1)=(b_u(count1)*u_vect_s(3,count1) + &
+            b_v(count1)*v_vect_s(3,count1))/(-ima*omega)
+
+      b_vect(1,1,count1)=(a_u(count1)*u_vect_s(1,count1) + &
+        a_v(count1)*v_vect_s(1,count1))*mu1
+      b_vect(1,2,count1)=(a_u(count1)*u_vect_s(2,count1) + &
+        a_v(count1)*v_vect_s(2,count1))*mu1
+      b_vect(1,3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
+        a_v(count1)*v_vect_s(3,count1))*mu1
+
+      b_vect(2,1,count1)=(b_u(count1)*u_vect_s(1,count1) + &
+        b_v(count1)*v_vect_s(1,count1))*ep1
+      b_vect(2,2,count1)=(b_u(count1)*u_vect_s(2,count1) + &
+        b_v(count1)*v_vect_s(2,count1))*ep1
+      b_vect(2,3,count1)=(b_u(count1)*u_vect_s(3,count1) + &
+        b_v(count1)*v_vect_s(3,count1))*ep1
+
+      a_vect(2,1,count1)=(a_u(count1)*u_vect_s(1,count1) + &
+        a_v(count1)*v_vect_s(1,count1))/(ima*omega)
+      a_vect(2,2,count1)=(a_u(count1)*u_vect_s(2,count1) + &
+        a_v(count1)*v_vect_s(2,count1))/(ima*omega)
+      a_vect(2,3,count1)=(a_u(count1)*u_vect_s(3,count1) + &
+        a_v(count1)*v_vect_s(3,count1))/(ima*omega)
+    enddo
+!$OMP END PARALLEL DO
+
+    ifa_vect=1
+    ifb_vect=1
+    iflambda=0
+    ifrho=0
+    ifE=0
+    ifcurlE=1
+    ifdivE=0
+
+    call Vector_Helmholtz_targ2_vect(nd,eps,zk1,ns,source,wts, &
+      ifa_vect,a_vect,ifb_vect,b_vect,iflambda,lambda,ifrho,rho, &
+      n_vect_s,ifE,E,ifcurlE,curlE,ifdivE,divE,nt,targets,thresh, &
+      ifdir)
+
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,nt
+      b_vect_t(1,1,count1)=n_vect_t(2,count1)*curlE(1,3,count1)- &
+        n_vect_t(3,count1)*curlE(1,2,count1)
+      b_vect_t(1,2,count1)=n_vect_t(3,count1)*curlE(1,1,count1)-&
+        n_vect_t(1,count1)*curlE(1,3,count1)
+      b_vect_t(1,3,count1)=n_vect_t(1,count1)*curlE(1,2,count1)-&
+        n_vect_t(2,count1)*curlE(1,1,count1)
+
+      b_vect_t(2,1,count1)=n_vect_t(2,count1)*curlE(2,3,count1)-&
+        n_vect_t(3,count1)*curlE(2,2,count1)
+      b_vect_t(2,2,count1)=n_vect_t(3,count1)*curlE(2,1,count1)-&
+        n_vect_t(1,count1)*curlE(2,3,count1)
+      b_vect_t(2,3,count1)=n_vect_t(1,count1)*curlE(2,2,count1)-&
+        n_vect_t(2,count1)*curlE(2,1,count1)
+    enddo
+!$OMP END PARALLEL DO
+
+!$OMP PARALLEL DO DEFAULT(SHARED)
+    do count1=1,nt
+        AA_u(count1)=AA_u(count1) - &
+          (b_vect_t(1,1,count1)*u_vect_t(1,count1) + &
+           b_vect_t(1,2,count1)*u_vect_t(2,count1) + &
+           b_vect_t(1,3,count1)*u_vect_t(3,count1))
+        AA_v(count1)=AA_v(count1) - &
+          (b_vect_t(1,1,count1)*v_vect_t(1,count1) + &
+           b_vect_t(1,2,count1)*v_vect_t(2,count1) + &
+           b_vect_t(1,3,count1)*v_vect_t(3,count1))
+
+        BB_u(count1)=BB_u(count1) - &
+          (b_vect_t(2,1,count1)*u_vect_t(1,count1) + &
+           b_vect_t(2,2,count1)*u_vect_t(2,count1) + &
+           b_vect_t(2,3,count1)*u_vect_t(3,count1))
+
+        BB_v(count1)=BB_v(count1) - &
+         (b_vect_t(2,1,count1)*v_vect_t(1,count1) + &
+          b_vect_t(2,2,count1)*v_vect_t(2,count1) + &
+          b_vect_t(2,3,count1)*v_vect_t(3,count1))
+    enddo
+!$OMP END PARALLEL DO
+    deallocate(a_vect)
+    deallocate(b_vect)
+    deallocate(lambda)
+    deallocate(rho)
+    deallocate(E)
+    deallocate(curlE)
+    deallocate(divE)
+    deallocate(u_vect_s)
+    deallocate(v_vect_s)
+    deallocate(n_vect_s)
+    deallocate(source)
+    deallocate(u_vect_t)
+    deallocate(v_vect_t)
+    deallocate(n_vect_t)
+    deallocate(targets)
+
+return
+end subroutine em_muller_trans_FMM2

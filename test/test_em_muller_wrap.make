@@ -1,8 +1,8 @@
 EXEC = int2-emwrap
 HOST = gcc
-#HOST = gcc-openmp
+HOST = gcc-openmp
 #HOST = intel
-#HOST = intel-ompenmp
+#HOST = intel-openmp
 
 #
 # For linux systems, it is assumed that the environment
@@ -39,25 +39,25 @@ endif
 
 ifeq ($(HOST),gcc)
     FC=gfortran 
-    FFLAGS=-fPIC -O3 -funroll-loops -march=x86-64 -std=legacy 
+    FFLAGS=-fPIC -O3 -funroll-loops -march=native -std=legacy 
 endif
 
 ifeq ($(HOST),gcc-openmp)
     FC = gfortran 
-    FFLAGS=-fPIC -O3 -funroll-loops -march=x86-64 -fopenmp -std=legacy
+    FFLAGS=-fPIC -O3 -funroll-loops -march=native -fopenmp -std=legacy
 endif
 
 ifeq ($(HOST),intel)
     FC=ifort 
-    FFLAGS= -O3 -fPIC -march=x86-64
+    FFLAGS= -O3 -fPIC -march=native
 endif
 
 ifeq ($(HOST),intel-openmp)
     FC = ifort 
-    FFLAGS= -O3 -fPIC -march=x86-64 -qopenmp
+    FFLAGS= -O3 -fPIC -march=native -qopenmp
 endif
 
-FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
+FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB) 
 #-L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
 
 .PHONY: all clean 
