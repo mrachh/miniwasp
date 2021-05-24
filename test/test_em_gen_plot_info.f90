@@ -26,8 +26,9 @@
       done = 1
       pi = atan(done)*4
 
-      n_components = 2
-      allocate(contrast_matrix(4,n_components),dP(4,n_components))
+      n_components = 3
+      ncmax = 3
+      allocate(contrast_matrix(4,ncmax),dP(4,ncmax))
       contrast_matrix(1,1)=1.1d0  
       contrast_matrix(2,1)=1.1d0  
       contrast_matrix(3,1)=1.2d0  
@@ -37,6 +38,11 @@
       contrast_matrix(2,2)=1.1d0  
       contrast_matrix(3,2)=1.2d0  
       contrast_matrix(4,2)=1.0d0
+
+      contrast_matrix(1,3)=1.1d0  
+      contrast_matrix(2,3)=1.1d0  
+      contrast_matrix(3,3)=1.2d0  
+      contrast_matrix(4,3)=1.0d0
 
       dP(1,1) = 0
       dP(2,1) = 0
@@ -48,9 +54,21 @@
       dP(3,2) = 0
       dP(4,2) = 1.0d0
 
+      dP(1,3) = 0
+      dP(2,3) = 0
+      dP(3,3) = 0
+      dP(4,3) = 1.0d0
+
+      
+
 !      string1 = '../geometries/simplest_cube_quadratic_v4_o08_r02.go3?'
-      string1 = '../geometries/lens_r00.go3?../geometries/con_r00.go3?'
-      string2 = '../geometries/lens_r00.msh?../geometries/con_r00.msh?'
+      string1 = '../geometries/lens_r00.go3?'// &
+        '../geometries/con_r00.go3?'// &
+        '../geometries/rhabdom_r00.go3?'
+
+      string2 = '../geometries/lens_r00.msh?'// &
+       ' ../geometries/con_r00.msh?'// &
+       '../geometries/rhabdom_r00.msh?'
 !      string1 = '../geometries/sphere_r02_o03.go3?'
 
 !       estimate number of discretization points      
@@ -91,6 +109,12 @@
       call em_solver_open_geom(string1,n_components,dP, &
         npatches,npts,eps,npatches_vect,npts_vect,norders,ixyzs,iptype, &
         srcvals,srccoefs,wts,sorted_vector,exposed_surfaces)
+
+
+      call surf_quadratic_msh_vtk_plot(npatches,norders,ixyzs, iptype, &
+        npts,srccoefs,srcvals,'eye.vtk','a')
+      
+      stop
 
 
       nd = 3

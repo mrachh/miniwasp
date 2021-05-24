@@ -429,6 +429,7 @@
       vf(2)=2.0d0*1.0d-3
       vf(3)=3.0d0*1.0d-3
 
+
       if(icase.eq.1) then
         call get_rhs_em_muller_trans_testing(xyz_in,vf, &
           direction,pol,srcvals,omega_use,rhs, &
@@ -443,7 +444,7 @@
 !  Pol(1:2), that is, Phi vector and 
 !  Theta vector of the plane wave.
 !
-        call get_rhs_em_muller_trans_PW(direction,Pol,srcvals, & 
+        call get_rhs_em_muller_trans_PW(direction,pol,srcvals, & 
           omega_use,rhs,n_components,npts_vect,contrast_matrix, &
           npts,exposed_surfaces)
       endif
@@ -452,8 +453,14 @@
 !
       call build_extended_targ(n_components,srcvals_extended, &
         srcvals,npts_vect,contrast_matrix,npts)
+
+      call prin2('rhs=*',rhs,24)
+      call prin2('rhs2=*',rhs(npts+1),24)
+      call prin2('rhs3=*',rhs(2*npts+1),24)
+      call prin2('rhs4=*',rhs(3*npts+1),24)
+
   
-      numit = 400
+      numit = 200
       niter = 0
       ifinout = 1
 
