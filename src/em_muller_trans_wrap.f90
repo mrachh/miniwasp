@@ -1135,6 +1135,10 @@
       subroutine em_elem_trans(nel,nverts,elements,iver_el_list, &
         iverstart,iverind)
 !
+!
+!f2py intent(in) nel,nverts,elements
+!f2py intent(out) iver_el_list,iverstart,iverind
+!
 !  This subroutine transposes the list of vertices which form the
 !  flat triangles to a list of flat triangles that meet at a vertex
 !
@@ -1194,9 +1198,107 @@
 !
 !
 !
-!      subroutine em_surf_fun_to_plot_fun(nd,npatches,norders,ixyzs, &
-!        iptype,npts,fvals,nverts,nel,iver_el_list,iverstart,iverind, &
-!        fvalsout)
-      
+      subroutine em_surf_fun_to_plot_fun(nd,npatches,norders,ixyzs, &
+        iptype,npts,fvals,nverts,nel,iver_el_list,iverstart,iverind, &
+        rscales,fvalsout)
+!
+!f2py intent(in) nd,npatches,norders,ixyzs,iptype,npts,fvals,nverts
+!f2py intent(in) nel,iver_el_list,iverstart,iverind,rscales
+!f2py intent(out) fvalsout 
+!
+!
+!  Given a flat triangulation of a surface sampled at vioreanu rokhlin
+!  nodes, and given a collection of functions defined on the surface
+!  evaluate the value of the functions at the vertices
+!  describing the flat triangulations. The value at the vertices
+!  is the weighted average of the interpolated function values
+!  from all the elements that meet at the vertex where 
+!  the weights can be user specified 
+!  
+!  
+      implicit none
+      integer, intent(in) :: nd,npatches,norders(npatches)
+      integer, intent(in) :: ixyzs(npatches+1),iptype(npatches),npts
+      integer, intent(in) :: nverts,nel,iver_el_list(3*nel)
+      integer, intent(in) :: iverstart(nverts+1),iverind(3*nel)
+      real *8, intent(in) :: fvals(nd,npts),rscales(nel)
+      real *8, intent(out) :: fvalsout(nd,nverts)
 
-!      end subroutine em_surf_fun_to_plot_fun
+      real *8, allocatable :: fcoefs(:,:),ftmp(:,:,:),pols(:,:)
+      real *8 uvs(2,3)
+      integer i,j,k,l,iel,idim,iver,npols,npmax,nomax,norder
+      real *8 ra
+      
+!
+!  Convert values to expansion coefficients
+!
+      allocate(fcoefs(nd,npts))
+      call surf_vals_to_coefs(nd,npatches,norders,ixyzs,iptype,npts, &
+        fvals,fcoefs)
+
+      uvs(1,1) = 0
+      uvs(2,1) = 0
+      
+      uvs(1,2) = 1
+      uvs(2,2) = 0
+
+      uvs(1,3) = 0
+      uvs(2,3) = 1
+
+      nomax = maxval(norders)
+      npmax = (nomax+1)*(nomax+2)/2
+      allocate(pols(npmax,3))
+
+      do i=1,3
+        call koorn_pols(uvs(1,i),nomax,npmax,pols(1,i))
+      enddo
+!
+!  For each patch, evaluate the functions at all the end points
+!
+!
+
+      allocate(ftmp(nd,3,npatches))
+      do i=1,npatches
+        norder = norders(i) 
+        npols = (norder+1)*(norder+2)/2
+        do j=1,3
+          do idim=1,nd
+            ftmp(idim,j,i) = 0
+          enddo
+        enddo
+        do j=1,3
+          do l=1,npols
+            do idim=1,nd
+              ftmp(idim,j,i) = ftmp(idim,j,i) + &
+                fcoefs(idim,ixyzs(i)+l-1)*pols(l,j)
+            enddo
+          enddo
+        enddo
+      enddo
+!
+!
+!  Now compute appropriate weighted average for each of
+!  the vertices
+!
+      do i=1,nverts
+        do idim=1,nd
+          fvalsout(idim,i) = 0
+        enddo
+        ra = 0
+        do j=iverstart(i),iverstart(i+1)-1
+          iel = iver_el_list(j)
+          iver = iverind(j)
+
+          ra = ra + rscales(iel)
+          do idim=1,nd
+            fvalsout(idim,i) = fvalsout(idim,i) + & 
+              ftmp(idim,iver,iel)*rscales(iel)
+          enddo
+        enddo
+        do idim=1,nd
+          fvalsout(idim,i) = fvalsout(idim,i)/ra
+        enddo
+      enddo
+
+
+      end subroutine em_surf_fun_to_plot_fun

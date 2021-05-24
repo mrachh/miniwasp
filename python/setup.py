@@ -26,6 +26,10 @@ mwasp.append('em_solver_wrap')
 mwasp.append('em_solver_wrap_postproc')
 mwasp.append('em_sol_exact')
 mwasp.append('em_plot_surf_current_vtk')
+mwasp.append('em_gen_plot_info_surf_mem')
+mwasp.append('em_gen_plot_info_surf')
+mwasp.append('em_elem_trans')
+mwasp.append('em_surf_fun_to_plot_fun')
 
 
 ext_helm = Extension(
