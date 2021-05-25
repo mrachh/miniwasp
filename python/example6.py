@@ -2,6 +2,7 @@ import fmm3dbie
 import fmm3dpy
 import numpy as np
 import mwaspbie as mw
+import pickle
 
 
 # Define various components of the geometry and problem 
@@ -93,6 +94,10 @@ fsol = fsol+'_icase'+str(icase)+'_idir'+str(idir)+'_ipol'+str(ipol)+'.dat'
 ftarg = '../test/data/targ_iref'+str(iref)+'_iomega'+str(iomegafrac)
 ftarg = ftarg+'_icase'+str(icase)+'_idir'+str(idir)+'_ipol'+str(ipol)+'.dat'
 
+fpickle = 'pickle_iref'+str(iref)+'_iomega'+str(iomegafrac)
+fpickle = fpickle+'_icase'+str(icase)+'_idir'+str(idir)+'_ipol'+str(ipol)+'.pickle'
+
+
 # compute number of patches and points
 npatches,npts = mw.em_solver_wrap_mem(string1,n_components)
 
@@ -125,7 +130,7 @@ sorted_vector,exposed_surfaces] = mw.em_solver_open_geom(string1,dP,npatches,
 #  Set points per wavelength in each direction 
 #  for target grid
 #
-ppw = 2
+ppw = 5
 
 
 #
@@ -147,13 +152,13 @@ dz = zmax-zmin
 
 # determine grid spacing to get the correct 
 # resolution in each dimension of target grid
-nx = int(np.ceil((xmax-xmin)*omega/2/np.pi*ppw))
-ny = int(np.ceil((ymax-ymin)*omega/2/np.pi*ppw))
-nz = int(np.ceil((zmax-zmin)*omega/2/np.pi*ppw))
+nx = int(np.ceil(1.5*(xmax-xmin)*omega/2/np.pi*ppw))
+ny = int(np.ceil(1.5*(ymax-ymin)*omega/2/np.pi*ppw))
+nz = int(np.ceil(1.5*(zmax-zmin)*omega/2/np.pi*ppw))
 
-xs = np.linspace(xmin+0.1*dx,xmax-0.1*dx,nx)
-ys = np.linspace(ymin+0.1*dy,ymax-0.1*dy,ny)
-zs = np.linspace(zmin+0.1*dz,zmax-0.1*dz,nz)
+xs = np.linspace(xmin-0.25*dx,xmax+0.25*dx,nx)
+ys = np.linspace(ymin-0.25*dy,ymax+0.25*dy,ny)
+zs = np.linspace(zmin-0.25*dz,zmax+0.25*dz,nz)
 xx,yy,zz = np.meshgrid(xs,ys,zs)
 
 nt = nx*ny*nz
@@ -167,4 +172,8 @@ targs[2,:] = zz.reshape(nt)
 #
 E,H = mw.em_solver_wrap_postproc(string1,dP,contrast_matrix,omega,eps,soln,
   targs)
+
+write_obj = {'xgrid':xs,'ygrid':ys,'zgrid':zs,'E':E,'H':H}
+with open(fpickle,'wb') as f:
+    pickle.dump(write_obj,f)
 
