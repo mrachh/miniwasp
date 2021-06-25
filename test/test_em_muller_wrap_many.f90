@@ -1,4 +1,29 @@
       implicit real *8 (a-h,o-z)
+      call prini(6,13)
+
+      idircase = 1
+      do iref=0,1
+        do ipolcase=1,1
+          do iomega=6,6
+            do idis=0,1
+              call em_muller_wrap_many(iref,ipolcase,iomega,idircase, &
+                idis)
+            enddo
+          enddo
+        enddo
+      enddo
+
+      
+
+      stop
+      end
+     
+
+
+      subroutine em_muller_wrap_many(iref,ipolcase,iomega,idircase,idis)
+      
+      
+      implicit real *8 (a-h,o-z)
       character *2000 string1
       character *300 fname1,fname2,fname3,fsol,ftarg,fname4
       integer n_components
@@ -15,7 +40,7 @@
       integer, allocatable :: sorted_vector(:)
       logical, allocatable :: exposed_surfaces(:)
       complex *16 pol(2)
-      complex *16 ima
+      complex *16 ima,zpig
       data ima/(0.0d0,1.0d0)/
       
       call prini(6,13)
@@ -23,31 +48,36 @@
       done = 1
       pi = atan(done)*4
 
-      iref = 1 
+      if(idis.eq.0) zpig = 1.34d0 
+      if(idis.eq.1) zpig = 1.34d0 + 0.05*ima
+      if(idis.eq.2) zpig = 1.34d0 + 0.005*ima
 
 
       ncmax = 4
       n_components = 4
       allocate(contrast_matrix(4,ncmax),dP(4,ncmax))
-      contrast_matrix(1,1)=1.34d0**2  
+      contrast_matrix(1,1)=zpig**2
       contrast_matrix(2,1)=1.0d0  
       contrast_matrix(3,1)=1.452d0**2  
       contrast_matrix(4,1)=1.0d0
 
-      contrast_matrix(1,2)=1.34d0**2  
+      contrast_matrix(1,2)=zpig**2
       contrast_matrix(2,2)=1.0d0  
       contrast_matrix(3,2)=1.348d0**2  
       contrast_matrix(4,2)=1.0d0
 
-      contrast_matrix(1,3)=1.34d0**2  
+      contrast_matrix(1,3)=zpig**2
       contrast_matrix(2,3)=1.0d0  
       contrast_matrix(3,3)=1.363d0**2  
       contrast_matrix(4,3)=1.0d0
 
       contrast_matrix(1,4) = 1.0d0
       contrast_matrix(2,4) = 1.0d0
-      contrast_matrix(3,4) = 1.34d0**2
+      contrast_matrix(3,4) = zpig**2 
       contrast_matrix(4,4) = 1.0d0
+
+      print *, "zpig=",zpig
+
 
 
       dP(1,1) = 0
@@ -80,18 +110,19 @@
 
 !      string1 = '../geometries/simplest_cube_quadratic_v4_o08_r02.go3?'
       string1 = trim(fname1)//trim(fname2)//trim(fname3)//trim(fname4)
-!
 
       print *, trim(string1)
 
+!      string1 = '../geometries/sphere_r02_o03.go3?'
 
 !       estimate number of discretization points      
       call em_solver_wrap_mem(string1,n_components,npatches,npts)
 
-      iomegafrac = 6
-!      omega = 2.0d0*pi/600/(iomegafrac+0.0d0)
-      omega = 2.0d0*pi/350.0d0
-      icase = 1
+      if(iomega.eq.2) omega = 2*pi/550.0d0
+      if(iomega.eq.3) omega = 2*pi/450.0d0
+      if(iomega.eq.4) omega = 2*pi/350.0d0
+      if(iomega.eq.6) omega = 2*pi/3600.0d0
+      icase = 2
       eps = 0.51d-3
       eps_gmres = 0.51d-5
       allocate(soln(4*npts))
@@ -99,8 +130,6 @@
 !  run the solver
 !
 !
-      idircase = 1
-
 !
 !  default values
 !
@@ -113,7 +142,6 @@
       endif
 
 
-      ipolcase = 1
 !
 !  default values
 !
@@ -131,15 +159,15 @@
       err_est = 0
 
 
-      write(fsol,'(a,i1,a,i1,a,i1,a,i1,a,i1,a)')  &
-        'data/soln_iref',iref,'_iomega',iomegafrac, &
+      write(fsol,'(a,i1,a,i1,a,i1,a,i1,a,i1,a,i1,a)')  &
+        'data/soln_iref',iref,'_iomega',iomega, &
         '_icase',icase,'_idir',idircase,'_ipol',ipolcase, &
-        '.dat'
+        '_idis',idis,'.dat'
 
-      write(ftarg,'(a,i1,a,i1,a,i1,a,i1,a,i1,a)')  &
-      'data/targ_iref',iref,'_iomega',iomegafrac, &
+      write(ftarg,'(a,i1,a,i1,a,i1,a,i1,a,i1,a,i1,a)')  &
+      'data/targ_iref',iref,'_iomega',iomega, &
         '_icase',icase,'_idir',idircase,'_ipol',ipolcase, &
-        '.dat'
+        '_idis',idis,'.dat'
       print *, trim(fsol)
       print *, trim(ftarg)
 
@@ -192,17 +220,7 @@
       x_max = 73915.741d0
       y_max = 35501.2415d0
       z_max = 46134.592d0
-
-      if(1.eq.0) then
-        x_min = -1.5d0    
-        x_max = 1.5d0
-
-        y_min = -1.5d0    
-        y_max = 1.5d0
-
-        z_min = -1.5d0    
-        z_max = 1.5d0
-      endif
+      
       dx=x_max-x_min
       dy=y_max-y_min
       dz=z_max-z_min
@@ -263,30 +281,8 @@
           real(E(3,i)),imag(E(3,i)), &
           real(H(1,i)),imag(H(1,i)),real(H(2,i)),imag(H(2,i)), &
           real(H(3,i)),imag(H(3,i))
-        
       enddo
       close(34)
 
-
-
-      call em_sol_exact(string1,n_components,dP, &
-        contrast_matrix,npts,omega,eps,direction,pol,ntarg,targs, &
-        E_ex,H_ex)
-
-      erra = 0
-      ra = 0
-      do i=1,ntarg
-        do j=1,3
-          erra = erra + abs(E(j,i)-E_ex(j,i))**2
-          erra = erra + abs(H(j,i)-H_ex(j,i))**2
-          ra = ra + abs(E_ex(j,i))**2
-          ra = ra + abs(H_ex(j,i))**2
-        enddo
-      enddo
-
-      erra = sqrt(erra/ra)
-      call prin2('error in E and H fields=*',erra,1)
-
-
-      stop
+      return
       end

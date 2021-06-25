@@ -278,13 +278,277 @@
 !
 !
 !
+      subroutine getnearquadsub_em_muller_trans_v2(npatches,norders,&
+       ixyzso,iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+       ipatch_id,uvs_targ,thresh,zpars,iquadtype,nnz,row_ptr,col_ind,&
+       iquad,nquad,wnear)
+!
+!
+!  This subroutine generates the near field fmm subtraction
+!  for the muller representation:
+!
+!        
+!
+!  input:
+!    npatches - integer
+!      number of patches
+!
+!    norders - integer(npatches)
+!      order of discretization on each patch 
+!
+!    ixyzso - integer(npatches+1)
+!      starting location of data on patch i (needs to be oversampled ixyzs)
+!  
+!    iptype - integer(npatches)
+!      type of patch
+!      iptype = 1 -> triangular patch discretized with RV nodes
+!
+!    npts_over - integer
+!      total number of oversampled points on the boundary
+!
+!    srcover - real *8 (12,npts_over)
+!      xyz(u,v) and derivative info sampled at the 
+!      oversampled nodes on the surface
+!      srcvals(1:3,i) - xyz info
+!      srcvals(4:6,i) - dxyz/du info
+!      srcvals(7:9,i) - dxyz/dv info
+!
+!    wover - real *8 (npts_over)
+!      oversampled smooth quadrature weights
+! 
+!    ndtarg - integer
+!      leading dimension of target array. Must be at least 20
+!        
+!    ntarg - integer
+!      number of targets
+!
+!    targs - real *8 (ndtarg,ntarg)
+!      target information
+!
+!    ipatch_id - integer(ntarg)
+!      id of patch of target i, id = -1, if target is off-surface
+!
+!    uvs_targ - real *8 (2,ntarg)
+!      local uv coordinates on patch if on surface, otherwise
+!      set to 0 by default
+!            
+!    thresh - real *8
+!      threshold for ignoring interactions if |s-t| < thresh,
+!      then no correction is computed
+!
+!    zpars - complex *16(1)
+!      kernel parameters
+!       * zpars(1) = omega 
+!
+!    iquadtype - integer
+!      quadrature type
+!        * iquadtype = 1, use ggq for self + adaptive integration
+!                 for rest
+!
+!    nnz - integer
+!      number of source patch-> target interactions in the near
+!      field
+! 
+!    row_ptr - integer(ntarg+1)
+!      row_ptr(i) is the pointer
+!      to col_ind array where list of relevant source patches
+!      for target i start
+!
+!    col_ind - integer (nnz)
+!      list of source patches relevant for all targets, sorted
+!      by the target number
+!
+!    iquad - integer(nnz+1)
+!      location in wnear array where quadrature for col_ind(i)
+!      starts
+!
+!    nquad - integer
+!      number of entries in wnear
+!
+!    output
+!      wnear - complex *16(nquad,16)
+!          the desired near field quadrature
+!
+
+      implicit none 
+      integer npatches,norders(npatches),npts_over,nquad
+      integer ixyzso(npatches+1),iptype(npatches)
+      real *8 srcover(12,npts_over),thresh,wover(npts_over)
+      integer ndtarg,ntarg
+      integer iquadtype
+      real *8 targs(ndtarg,ntarg)
+      complex *16 zpars(5)
+      integer nnz,ipars(2)
+      real *8 dpars(1)
+      integer row_ptr(ntarg+1),col_ind(nnz),iquad(nnz+1)
+      complex *16 wnear(nquad,16)
+
+      integer ipatch_id(ntarg)
+      real *8 uvs_targ(2,ntarg)
+
+      complex *16 alpha,beta
+      integer i,j,ndi,ndd,ndz,count1,count2,icount
+
+      integer ipv
+      integer :: t1, t2,clock_rate, clock_max
+
+      procedure (), pointer :: fker
+      external  fker_em_muller_trans_v2
+      external  em_muller_trans_v2
+
+      ndz=5
+      ndd=1
+      ndi=2
+      ipv=1
+
+      fker => em_muller_trans_v2
+
+      ipars(1)=1
+      ipars(2)=1
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,1))
+       print *, "done with kernel 1"
+
+      ipars(1)=1
+      ipars(2)=2
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,2))
+      print *, "done with kernel 2"
+
+      ipars(1)=1
+      ipars(2)=3
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,3))
+      print *, "done with kernel 3"
+
+      ipars(1)=1
+      ipars(2)=4
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,4))
+      print *, "done with kernel 4"
+
+
+      ipars(1)=2
+      ipars(2)=1
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,5))
+      print *, "done with kernel 5"
+
+      ipars(1)=2
+      ipars(2)=2
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,6))
+      print *, "done with kernel 6"
+
+      ipars(1)=2
+      ipars(2)=3
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,7))
+
+      print *, "done with kernel 7"
+
+      ipars(1)=2
+      ipars(2)=4
+
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,8))
+
+      print *, "done with kernel 8"
+
+!$OMP PARALLEL DO DEFAULT(SHARED)      
+      do i=1,nquad
+        wnear(i,9)=-wnear(i,3)
+        wnear(i,10)=-wnear(i,4)
+      enddo
+!$OMP END PARALLEL DO      
+
+      print *, "done with kernel 9,10"
+
+
+      ipars(1)=3
+      ipars(2)=3
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,11))
+
+      ipars(1)=3
+      ipars(2)=4
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,12))
+
+!$OMP PARALLEL DO DEFAULT(SHARED)      
+      do i=1,nquad
+        wnear(i,13)=-wnear(i,7)
+        wnear(i,14)=-wnear(i,8)
+      enddo
+!$OMP END PARALLEL DO      
+
+      print *, "done with kernel 13,14"
+
+
+      ipars(1)=4
+      ipars(2)=3
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,15))
+
+      print *, "Done with kernel 15"
+
+
+      ipars(1)=4
+      ipars(2)=4
+      call zgetnearquadsub_guru(npatches,norders,ixyzso,&
+        &iptype,npts_over,srcover,wover,ndtarg,ntarg,targs,&
+        &ipatch_id,uvs_targ,thresh,ipv,fker,ndd,dpars,ndz,zpars,&
+        &ndi,ipars,nnz,row_ptr,col_ind,iquad,nquad,&
+        &wnear(1,16))
+
+    return
+    end subroutine getnearquadsub_em_muller_trans_v2
+!
+!
+!
+!
+!
 !
 !
 
       subroutine lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,&
      &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
-     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,sigma,novers,&
-     &nptso,ixyzso,srcover,whtsover,pot,wnear,&
+     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,iquadsub,nquadsub,&
+     &sigma,novers,&
+     &nptso,ixyzso,srcover,whtsover,pot,wnear,wnearsub,&
      &n_components,contrast_matrix,npts_vect)
 
 !
@@ -378,6 +642,16 @@
 !    wnear  - complex *16(nquad,16)
 !      near field precomputed quadrature
 !
+!    iquadsub - integer(nnz+1)
+!      location in wnearsub array where fmm subtraction for col_ind(i)
+!      starts
+!
+!    nquadsub - integer
+!      number of entries in wnearsub
+!
+!    wnear  - complex *16(nquadsub,16)
+!      near field precomputed fmm subtraction 
+!
 !    sigma - complex *16(4*ns)
 !      sigma(1:ns) - first component of 'a' along
 !        the srcvals(4:6,i) direction
@@ -432,14 +706,14 @@
       real *8 srccoefs(9,npts),srcvals(12,npts),eps
       real *8 targs(ndtarg,ntarg)
       complex *16 zpars(5),zpars_aux(5)
-      integer nnz,row_ptr(ntarg+1),col_ind(nnz),nquad
-      integer iquad(nnz+1)
+      integer nnz,row_ptr(ntarg+1),col_ind(nnz),nquad,nquadsub
+      integer iquad(nnz+1),iquadsub(nnz+1)
       complex *16 sigma(4*npts),sigma2(npts)
       integer n_components
       integer npts_vect(n_components)
       complex *16 contrast_matrix(4,n_components)
 
-      complex *16 wnear(nquad,16)
+      complex *16 wnear(nquad,16),wnearsub(nquadsub,16)
 
       integer novers(npatches+1)
       integer nover,npolso,nptso
@@ -596,6 +870,9 @@
       istart=1
       ifinish=npts_vect(1)
 
+      call cpu_time(t1)
+!$      t1 = omp_get_wtime()      
+
       do count1=1,n_components
         zpars_aux(1)=zpars(1)
         zpars_aux(2)=contrast_matrix(1,count1)
@@ -617,12 +894,16 @@
           ifinish=istart+npts_vect(count1+1)-1
         endif
       enddo
+      call cpu_time(t2)
+!$      t2 = omp_get_wtime()      
+      print *, "total fmm time=",t2-t1
 !
 !  Add in near quadrature corrections
 !
 !
 !
       call cpu_time(t1)
+!$       t1 = omp_get_wtime()      
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch) &
 !$OMP&PRIVATE(npols,jquadstart,jstart,l,count1,count2) &
 !$OMP&PRIVATE(icomp)
@@ -642,10 +923,29 @@
               enddo
             enddo
           enddo
+          npols = ixyzso(jpatch+1)-ixyzso(jpatch)
+          jquadstart = iquadsub(j)
+          jstart = ixyzso(jpatch) 
+          do l=1,npols
+            do count1=0,3
+              do count2=0,3
+                icomp = count1*4+count2+1
+                pot_aux(i+count1*npts) = pot_aux(i+count1*npts) - &
+                   &wnearsub(jquadstart+l-1,icomp)* &
+                   &sigmaover(jstart+l-1+ns*count2)
+              enddo
+            enddo
+          enddo
         enddo
       enddo
 !$OMP END PARALLEL DO      
+      
+      call cpu_time(t2)
+!$      t2 = omp_get_wtime()      
+      print *, "done adding near correction"
+      print *, "near correction time=",t2-t1
 
+      goto 1111
 !
 !
 !  subtract near quadrature from oversampled sources directly 
@@ -660,11 +960,14 @@
       allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
 
       nss = 0
-
+      
+      call cpu_time(t1)
+!$       t1 = omp_get_wtime()      
 
       ifdir=1
       istart=0
       do count1=1,n_components
+        print *, "icomp=",count1
         zpars_aux(1)=zpars(1)
         zpars_aux(2)=contrast_matrix(1,count1)
         zpars_aux(3)=contrast_matrix(2,count1)
@@ -710,12 +1013,16 @@
 
         istart = istart + npts_vect(count1)
       enddo
+      print *, "done subtracting near correction"
+      call cpu_time(t2)
+!$       t2 = omp_get_wtime()      
+      print *, "near correction subtraction time=",t2-t1
 !
 !  End of subtracting near quadrautre from oversampled sources
 !
 !
 
-
+ 1111 continue
 
 !
 !  rescale potentials so that strength of identity matrix
@@ -897,10 +1204,12 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 
 
       integer nover,npolso,nptso
-      integer nnz,nquad
+      integer nnz,nquad,nquadsub
       integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
+      integer, allocatable :: iquadsub(:)
 
       complex *16, allocatable :: wnear(:,:)
+      complex *16, allocatable :: wnearsub(:,:)
 
       real *8, allocatable :: srcover(:,:),wover(:)
       integer, allocatable :: ixyzso(:),novers(:)
@@ -933,6 +1242,8 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       complex *16, allocatable :: svec(:),yvec(:),wtmp(:)
       complex *16 ima
 
+      real *8 thresh
+
       ima=(0.0d0,1.0d0)
   
 !
@@ -958,14 +1269,14 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       ndtarg = 12
       ntarg = npts
       allocate(targs(ndtarg,npts),uvs_targ(2,ntarg),ipatch_id(ntarg))
-!C$OMP PARALLEL DO DEFAULT(SHARED)
+!$OMP PARALLEL DO DEFAULT(SHARED)
       do i=1,ntarg
         targs(:,i)=srcvals(:,i)
         ipatch_id(i) = -1
         uvs_targ(1,i) = 0
         uvs_targ(2,i) = 0
       enddo
-!C$OMP END PARALLEL DO   
+!$OMP END PARALLEL DO   
 
 
 !
@@ -991,11 +1302,11 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       call get_centroid_rads(npatches,norders,ixyzs,iptype,npts,& 
      &srccoefs,cms,rads)
 
-!C$OMP PARALLEL DO DEFAULT(SHARED) 
+!$OMP PARALLEL DO DEFAULT(SHARED) 
       do i=1,npatches
         rad_near(i) = rads(i)*rfac
       enddo
-!C$OMP END PARALLEL DO      
+!$OMP END PARALLEL DO      
 
 !
 !    find near quadrature correction interactions
@@ -1049,17 +1360,37 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       print *, "nquad=",nquad
       allocate(wnear(nquad,16))
       do j=1,16
+!$OMP PARALLEL DO DEFAULT(SHARED)      
         do i=1,nquad
           wnear(i,j)=0
         enddo
+!$OMP END PARALLEL DO    
       enddo
-!C$OMP END PARALLEL DO    
+
+
+      allocate(iquadsub(nnz+1)) 
+      call get_iquad_rsc(npatches,ixyzso,npts,nnz,row_ptr,col_ind,&
+     &iquadsub)
+        
+      nquadsub = iquadsub(nnz+1)-1
+      print *, "nquadsub=",nquadsub
+
+      allocate(wnearsub(nquadsub,16))
+
+      do j=1,16
+!$OMP PARALLEL DO DEFAULT(SHARED)      
+        do i=1,nquadsub
+          wnearsub(i,j)=0
+        enddo
+!$OMP END PARALLEL DO    
+      enddo
 
       iquadtype = 1
 
 !!      eps2 = 1.0d-8
 
       print *, "starting to generate near quadrature"
+!      goto 1111
       call cpu_time(t1)
 !$      t1 = omp_get_wtime()      
       ndtarg=20
@@ -1071,8 +1402,34 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 !$      t2 = omp_get_wtime()     
 
       call prin2('quadrature generation time=*',t2-t1,1)
-      print *, "done generating near quadrature, now starting gmres"
+ 1111 continue
 
+      call get_fmm_thresh(12,npts_over,srcover,ndtarg,npts,srcvals_extended,thresh)
+
+      call prinf('iquad=*',iquad,20)
+      call prinf('iquadsub=*',iquadsub,20)
+
+      call prinf('ixyzs=*',ixyzs,20)
+      call prinf('ixyzso=*',ixyzso,20)
+
+      print *, "nquad=",nquad
+      print *, "nquadsub=",nquadsub
+
+      print *, "thresh=",thresh
+      call cpu_time(t1)
+!$      t1 = omp_get_wtime()      
+      ndtarg=20
+      call getnearquadsub_em_muller_trans_v2(npatches,norders,&
+     &ixyzso,iptype,npts_over,srcover,wover,ndtarg,npts,srcvals_extended,&
+     &ipatch_id,uvs_targ,thresh,zpars,iquadtype,nnz,row_ptr,col_ind,&
+     &iquadsub,nquadsub,wnearsub)
+      call cpu_time(t2)
+!$      t2 = omp_get_wtime()     
+
+      call prin2('quadrature subtraction generation time=*',t2-t1,1)
+
+
+      print *, "done generating near quadrature, now starting gmres"
       ndtarg=12
 !
 !
@@ -1117,9 +1474,9 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 !$        tt1 = omp_get_wtime()  
         call lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,&
      &iptype,npts,srccoefs,srcvals,ndtarg,npts,targs,&
-     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,&
+     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,iquadsub,nquadsub,&
      &vmat(1,it),novers,npts_over,ixyzso,srcover,wover,wtmp,wnear,&
-     &n_components,contrast_matrix,npts_vect)
+     &wnearsub,n_components,contrast_matrix,npts_vect)
         call cpu_time(tt2)
 !$        tt2 = omp_get_wtime()  
         print *, it,tt2-tt1
@@ -1203,9 +1560,9 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 
           call lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,&
      &iptype,npts,srccoefs,srcvals,ndtarg,npts,targs,&
-     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,&
+     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,iquadsub,nquadsub,&
      &soln,novers,npts_over,ixyzso,srcover,wover,wtmp,wnear,&
-     &n_components,contrast_matrix,npts_vect)
+     &wnearsub,n_components,contrast_matrix,npts_vect)
 
             
           do i=1,npts
@@ -2504,6 +2861,8 @@ implicit none
     endif
   enddo
 
+  print *, "done computing inclusion vect"
+
  icount=1
  n_regions=0
  do count1=0,n_components
@@ -2538,6 +2897,8 @@ implicit none
    uvs_targ(1,count1) = 0
    uvs_targ(2,count1) = 0
  enddo
+
+ print *, "done sorting targets"
 
 
  call lpcomp_em_muller_far_dir(npatches,norders,ixyzs,&
@@ -2696,6 +3057,8 @@ end subroutine evaluate_field_muller
 !c
       call findnearmem(cms,npatches,rad_near,ndtarg,targs,ntarg,nnz)
 
+      print *, "nnz=",nnz
+
       allocate(row_ptr(ntarg+1),col_ind(nnz))
       
       call findnear(cms,npatches,rad_near,ndtarg,targs,ntarg,row_ptr,& 
@@ -2721,6 +3084,7 @@ end subroutine evaluate_field_muller
        &nnz,row_ptr,col_ind,rfac,novers,ixyzso)
 
       npts_over = ixyzso(npatches+1)-1
+      print *, "npts_over=",npts_over
 
       allocate(srcover(12,npts_over),wover(npts_over))
 
@@ -2734,6 +3098,7 @@ end subroutine evaluate_field_muller
 !c   compute near quadrature correction
 !c
       nquad = iquad(nnz+1)-1
+      print *, "nquad=",nquad
       allocate(wnear(nquad,12))
 
       do j=1,12
@@ -2924,6 +3289,7 @@ end subroutine evaluate_field_muller
       do count2=1,4
         ipars(1)=count1
         ipars(2)=count2
+        print *, count1,count2, eps
         call zgetnearquad_ggq_guru(npatches,norders,ixyzs,&
          &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
          &ipatch_id,uvs_targ,eps,ipv,fker,ndd,dpars,ndz,zpars,&
@@ -3330,7 +3696,7 @@ end subroutine get_curlcurlSka
       complex *16 omega,ep,mu
 
       integer nd,ntarg0
-      integer icount
+      integer icount,nmax
 
       real *8 ttot,done,pi
 
@@ -3399,9 +3765,9 @@ end subroutine get_curlcurlSka
 !write (*,*) 'aquí no llega'
 !read (*,*)
 		call cpu_time(t1)
-!C$      t1 = omp_get_wtime()
-!C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
-!C$OMP$PRIVATE(jstart,pottmp,npols)
+!$      t1 = omp_get_wtime()
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart,ep,mu) &
+!$OMP PRIVATE(jstart,pottmp,npols)
       do i=1,ntarg
         ep=targs(4,i)+ima*targs(5,i)
         mu=targs(6,i)+ima*targs(7,i)
@@ -3450,39 +3816,40 @@ end subroutine get_curlcurlSka
         enddo
       enddo
 
+      nmax = 0
+      call get_near_corr_max(ntarg,row_ptr,nnz,col_ind,npatches, &
+        ixyzso,nmax)
+      nss = nmax
+      allocate(srctmp2(12,nss),wtmp2(nss))
+      allocate(ctmp2_a_u(nss),ctmp2_a_v(nss))
+      allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
       ifdir=1
-      i=0
+      istart=0
       do count1=1,n_regions
        zpars_aux(1)=zpars(1)
        zpars_aux(2)=targs(4,i+1)+ima*targs(5,i+1)
        zpars_aux(3)=targs(6,i+1)+ima*targs(7,i+1)
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(count2,i,nss,j,jpatch,jstart) &
+!$OMP PRIVATE(npover,l,srctmp2,ctmp2_a_u,ctmp2_a_v,ctmp2_b_u,ctmp2_b_v) &
+!$OMP PRIVATE(wtmp2,E)
        do count2=1,ntarg_vect(count1)
-       i=i+1
-        nss = 0
-        do j=row_ptr(i),row_ptr(i+1)-1
-          jpatch = col_ind(j)
-          nss = nss + ixyzso(jpatch+1)-ixyzso(jpatch)
-        enddo
-        allocate(srctmp2(12,nss),wtmp2(nss))
-        allocate(ctmp2_a_u(nss),ctmp2_a_v(nss))
-	      allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
-
-        rmin = 1.0d6
+        i = count2 + istart
         ii = 0
         do j=row_ptr(i),row_ptr(i+1)-1
           jpatch = col_ind(j)
           jstart = ixyzso(jpatch)-1
           npover = ixyzso(jpatch+1)-ixyzso(jpatch)
           do l=1,npover
-			      ii = ii+1
-			      srctmp2(:,ii) = srcover(:,jstart+l)
-			      ctmp2_a_u(ii)=sigmaover(jstart+l)
-			      ctmp2_a_v(ii)=sigmaover(jstart+l+ns)			
-			      ctmp2_b_u(ii)=sigmaover(jstart+l+2*ns)
-			      ctmp2_b_v(ii)=sigmaover(jstart+l+3*ns)
-			      wtmp2(ii)=whtsover(jstart+l)
+            ii = ii+1
+           srctmp2(:,ii) = srcover(:,jstart+l)
+           ctmp2_a_u(ii)=sigmaover(jstart+l)
+           ctmp2_a_v(ii)=sigmaover(jstart+l+ns)
+           ctmp2_b_u(ii)=sigmaover(jstart+l+2*ns)
+           ctmp2_b_v(ii)=sigmaover(jstart+l+3*ns)
+           wtmp2(ii)=whtsover(jstart+l)
           enddo
         enddo
+        nss = ii
         call em_muller_far_FMM(eps,zpars_aux,nss,ntarg0,srctmp2,ndtarg,targs(:,i),&
         &wtmp2,ctmp2_a_u,ctmp2_a_v,ctmp2_b_u,ctmp2_b_v,&
         &E(1:3),E(4:6),thresh,ifdir)
@@ -3495,10 +3862,10 @@ end subroutine get_curlcurlSka
           H_far(2,i)=H_far(2,i)-E(5)
           H_far(3,i)=H_far(3,i)-E(6)
 
-        deallocate(srctmp2,wtmp2)
-        deallocate(ctmp2_a_u,ctmp2_a_v,ctmp2_b_u,ctmp2_b_v)
 
        enddo
+!$OMP END PARALLEL DO       
+       istart = istart+ ntarg_vect(count1)
       enddo
 
   

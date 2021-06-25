@@ -110,6 +110,17 @@
       call em_solver_open_geom(string1,n_components,dP, &
         npatches,npts,eps,npatches_vect,npts_vect,norders,ixyzs,iptype, &
         srcvals,srccoefs,wts,sorted_vector,exposed_surfaces)
+      
+      xmin = minval(srcvals(1,:))
+      xmax = maxval(srcvals(1,:))
+
+      ymin = minval(srcvals(2,:))
+      ymax = maxval(srcvals(2,:))
+
+      zmin = minval(srcvals(3,:))
+      zmax = maxval(srcvals(3,:))
+
+      print *, xmin,xmax,ymin,ymax,zmin,zmax
 
 
       call surf_quadratic_msh_vtk_plot(npatches,norders,ixyzs, iptype, &

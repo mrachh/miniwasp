@@ -22,6 +22,8 @@ eps = 1e-6
 sorted_vector,exposed_surfaces] = mw.em_solver_open_geom(string1,dP,npatches,
   npts,eps)
 
+
+
 #Estimate number of vertices and flat triangles in geometry
 nverts,nel = mw.em_gen_plot_info_surf_mem(string2,n_components)
 

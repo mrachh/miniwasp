@@ -2,3 +2,12 @@
 int2*
 fort.*
 *.txt
+slurm*
+*.out
+*.sav*
+*.vtk
+*.so
+*.pickle
+*.a
+*.go3
+*.msh

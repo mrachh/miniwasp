@@ -4,15 +4,19 @@ import numpy as np
 import mwaspbie as mw
 
 # Define geometry and number of components
-string1 = '../geometries/lens_r00.go3?'
-n_components = 1
+string1 = '../geometries/lens_r00.go3?../geometries/con_r00.go3?../geometries/rhabdom_r00.go3?../geometries/sphere_r04_o01.go3?'
+n_components = 4
 
 # compute number of patches and points
 npatches,npts = mw.em_solver_wrap_mem(string1,n_components)
 
 # Set translation and scaling of each component
 dP = np.zeros((4,n_components),order="F")
-dP[3,0] = 1.0
+dP[3,0:n_components] = 1.0
+dP[0,n_components-1] = 71563.516
+dP[1,n_components-1] = 14128.477
+dP[2,n_components-1] = 40817.917
+dP[3,n_components-1] = 10206.791
 
 eps = 1e-6
 
@@ -23,6 +27,31 @@ sorted_vector,exposed_surfaces] = mw.em_solver_open_geom(string1,dP,npatches,
 
 # plot surface info (plots scalar field as z coordinate of the surface)
 bie.surf_vtk_plot(norders,ixyzs,iptype,srccoefs,srcvals,'surf.vtk','a')
+
+#compute centroid and radius of bounding sphere
+cm = np.zeros(3)
+xmin = np.min(srcvals[0,:])
+xmax = np.max(srcvals[0,:])
+ymin = np.min(srcvals[1,:])
+ymax = np.max(srcvals[1,:])
+zmin = np.min(srcvals[2,:])
+zmax = np.max(srcvals[2,:])
+
+cm[0] = (xmin+xmax)/2
+cm[1] = (ymin+ymax)/2
+cm[2] = (zmin+zmax)/2
+
+dx = xmax - xmin
+dy = ymax - ymin
+dz = zmax - zmin
+
+rad = dx
+if( dy > rad ):
+    rad = dy
+if( dz > rad ):
+    rad = dz
+rad = rad/2.0*1.25
+
 
 # plot surface info with prescribed scalar field. We will use
 # x coordinate as a demo which is stored in srcvals[0,:]

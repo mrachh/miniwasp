@@ -19,14 +19,21 @@ iref = 0
 #  that defines the wavelength in the
 #  simulation
 #  
-#  omega = 2*pi/(600)/iomegafrac
-#
-#  Currently supported values are 1 and 3
 #
 #
-iomegafrac = 1
+iomegafrac = 2
 
-omega = np.pi*2.0/600.0/(iomegafrac+0.0)
+if(iomegafrac == 1):
+    omega = np.pi*2.0/600.0
+
+if(iomegafrac == 2):
+    omega = np.pi*2.0/550.0
+
+if(iomegafrac == 3):
+    omega = np.pi*2.0/450.0
+
+if(iomegafrac == 4):
+    omega = np.pi*2.0/350.0
 
 
 #
@@ -60,8 +67,6 @@ if (idir == 1):
 #  polarization directions.
 #  Options for ipol = 1 or 2. 
 #
-#  Currenltly simulations only complete for
-#  ipol = 1
 #
 ipol = 1
 pol = np.zeros(2,dtype='complex')
