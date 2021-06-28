@@ -1,57 +1,298 @@
       implicit real *8 (a-h,o-z)
+      real *8, allocatable :: srcvals(:,:),srccoefs(:,:),targs(:,:)
+      real *8, allocatable :: wts(:)
+      real *8, allocatable :: cms(:,:),rads(:),rad_near(:)
+      real *8 errs(6),ts(2)
+      real *8, allocatable :: rfacs(:,:)
+      character *100 fname
+      integer ipars(2)
+      integer, allocatable :: row_ptr(:),col_ind(:)
+      integer, allocatable :: iquad(:)
+      real *8, allocatable :: srcover(:,:),wover(:)
+      complex *16, allocatable :: uval(:),dudnval(:)
+      complex *16, allocatable :: sigmaover(:),slp_near(:),dlp_near(:)
+      complex *16, allocatable :: pot(:),potslp(:),potdlp(:)
+      complex *16, allocatable :: potslp2(:)
 
-      real *8 v1(3),v2(3),v3(3),v4(3)
-      real *8, allocatable :: triaskel(:,:,:)
+      complex *16 zk
+
+      integer, allocatable :: norders(:),ixyzs(:),iptype(:)
+      integer, allocatable :: ixyzso(:),nfars(:)
+
+      integer, allocatable :: ipatch_id(:),inode_id(:)
+      real *8, allocatable :: uvs_targ(:,:)
+      real *8 xyz_out(3),xyz_in(3)
+      complex *16, allocatable :: sigma(:)
+      complex * 16 zpars(3)
 
       call prini(6,13)
 
-      nu = 10
-      nv = 20
-
-
-      npatches = 2*nu*nv
-
-      v1(1) = -1.0d0
-      v1(2) = -2.0d0
-      v1(3) = 0.0d0
-
-      v2(1) = 1.0d0
-      v2(2) = -2.0d0
-      v2(3) = 0.0d0
-
-      v3(1) = 1.0d0
-      v3(2) = 2.0d0
-      v3(3) = 0.0d0
-
-      v4(1) = -1.0d0
-      v4(2) = 2.0d0
-      v4(3) = 0.0d0
-
-      allocate(triaskel(3,3,npatches))
-      call xtri_rectmesh_3d(v1,v2,v3,v4,nu,nv,npatches,triaskel)
-
-      call xtri_vtk_flat(33, npatches, triaskel, 'a')
-
-
+      fname = 'ellipsoid.vtk'
+      
       a = 2.0d0
       b = 3.0d0
       c = 5.0d0
 
-      iref = 1
-
+      iref = 2
+      npatches = 0
       call get_rectparapiped_mem(a,b,c,iref,npatches)
-      call prinf('npatches=*',npatches,1)
 
-      deallocate(triaskel)
-      allocate(triaskel(3,3,npatches))
+      norder = 5
+      npols = (norder+1)*(norder+2)/2
+      npts = npatches*npols
+      allocate(srcvals(12,npts),srccoefs(9,npts))
 
-      call get_rectparapiped(a,b,c,iref,npatches,triaskel)
+      call get_ellipsoid_geom(a,b,c,norder,npatches,iref,srcvals, &
+       srccoefs,ifplot,trim(fname))
+
+      allocate(iptype(npatches),ixyzs(npatches+1),norders(npatches))
+
+      do i=1,npatches
+        ixyzs(i) = (i-1)*npols+1
+        norders(i) = norder
+        iptype(i) = 1
+      enddo
+      ixyzs(npatches+1) = 1+npts
+
+      xyz_in(1) = 0.01d0
+      xyz_in(2) = 0.32d0
+      xyz_in(3) = -0.13d0
+
       
-      call xtri_vtk_flat(34, npatches, triaskel, 'a')
+      xyz_out(1) = 7.2d0
+      xyz_out(2) = -6.3d0
+      xyz_out(3) = 5.4d0
+
+      zk  = 1.1d0
+      allocate(targs(3,npts))
+      allocate(ixyzso(npatches+1),nfars(npatches))
       
-       
+      allocate(wts(npts))
+      call get_qwts(npatches,norders,ixyzs,iptype,npts,srcvals,wts)
+
+
+
+      allocate(cms(3,npatches),rads(npatches),rad_near(npatches))
+      allocate(pot(npts),potslp(npts),potdlp(npts))
+
+      call get_centroid_rads(npatches,norders,ixyzs,iptype,npts, &
+          srccoefs,cms,rads)
+
+      allocate(sigma(npts),uval(npts),dudnval(npts))
+
+      do i=1,npts
+        call h3d_slp(xyz_out,3,srcvals(1,i),0,dpars,1,zk,0, &
+           ipars,uval(i))
+        call h3d_sprime(xyz_out,12,srcvals(1,i),0,dpars,1,zk,0, &
+            ipars,dudnval(i))
+      enddo
+
+      ndtarg = 3
+     
+      do i=1,npts
+        targs(1,i) = srcvals(1,i)
+        targs(2,i) = srcvals(2,i)
+        targs(3,i) = srcvals(3,i)
+      enddo
+
+      allocate(ipatch_id(npts),uvs_targ(2,npts))
+      do i=1,npts
+        ipatch_id(i) = -1
+        uvs_targ(1,i) = 0
+        uvs_targ(2,i) = 0
+      enddo
+
+      call get_patch_id_uvs(npatches,norders,ixyzs,iptype,npts, & 
+              ipatch_id,uvs_targ)
+
+ 
+!
+!    find near field
+!
+      iptype = 1
+      call get_rfacs(norder,iptype,rfac,rfac0)
+      do i=1,npatches 
+        rad_near(i) = rads(i)*rfac
+      enddo
+      
+
+      call findnearmem(cms,npatches,rad_near,ndtarg,targs,npts,nnz)
+
+      allocate(row_ptr(npts+1),col_ind(nnz))
+      
+      call findnear(cms,npatches,rad_near,ndtarg,targs,npts,row_ptr, &
+             col_ind)
+
+      allocate(iquad(nnz+1)) 
+      call get_iquad_rsc(npatches,ixyzs,npts,nnz,row_ptr,col_ind, &
+             iquad)
+
+      nquad = iquad(nnz+1)-1
+      allocate(slp_near(nquad),dlp_near(nquad))
+
+
+      ndtarg = 3
+
+      eps = 0.50001d-9
+
+      ikerorder = -1
+
+
+
+      call cpu_time(t1)
+      call get_far_order(eps,npatches,norders,ixyzs,iptype,cms, &
+         rads,npts,srccoefs,ndtarg,npts,targs,ikerorder,zk, &
+         nnz,row_ptr,col_ind,rfac,nfars,ixyzso)
+      call cpu_time(t2)
+      tfar = t2-t1
+
+
+      npts_over = ixyzso(npatches+1)-1
+
+      print *, "npts_over=",npts_over
+
+
+      allocate(srcover(12,npts_over),sigmaover(npts_over), &
+              wover(npts_over))
+
+          
+      call oversample_geom(npatches,norders,ixyzs,iptype,npts, & 
+         srccoefs,srcvals,nfars,ixyzso,npts_over,srcover)
+
+      call get_qwts(npatches,nfars,ixyzso,iptype,npts_over, &
+             srcover,wover)
+
+
+      do i=1,nquad
+        slp_near(i) = 0
+        dlp_near(i) = 0
+      enddo
+
+
+
+      call cpu_time(t1)
+
+      zpars(1) = zk
+      zpars(2) = 1.0d0
+      zpars(3) = 0.0d0
+
+      iquadtype = 1
+
+
+      call getnearquad_helm_comb_dir(npatches,norders, &
+           ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
+           ipatch_id,uvs_targ,eps,zpars,iquadtype,nnz,row_ptr,col_ind, &
+           iquad,rfac0,nquad,slp_near)
+
+      
+      zpars(2) = 0.0d0
+      zpars(3) = 1.0d0
+      call getnearquad_helm_comb_dir(npatches,norders, &
+           ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
+           ipatch_id,uvs_targ,eps,zpars,iquadtype, &
+           nnz,row_ptr,col_ind,iquad,rfac0,nquad,dlp_near)
+      
+      call cpu_time(t2)
+      tquadgen = t2-t1
+
+
+
+      ifinout = 1     
+
+      zpars(2) = 1.0d0
+      zpars(3) = 0.0d0
+
+
+      call cpu_time(t1)
+
+      call lpcomp_helm_comb_dir_addsub(npatches,norders,ixyzs, &
+       iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
+       eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,slp_near, &
+       dudnval,nfars,npts_over,ixyzso,srcover,wover,potslp)
+
+
+      zpars(2) = 0.0d0
+      zpars(3) = 1.0d0
+
+
+      call lpcomp_helm_comb_dir_setsub(npatches,norders,ixyzs, &
+       iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
+       eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,dlp_near, &
+       uval,nfars,npts_over,ixyzso,srcover,wover,potdlp)
+
+
+      call cpu_time(t2)
+      tlpcomp = t2-t1
+
+
+!
+!
+!      compute error
+!
+      errl2 = 0
+      rl2 = 0
+      do i=1,npts
+        pot(i) = (potslp(i) - potdlp(i))*2
+        errl2 = errl2 + abs(uval(i)-pot(i))**2*wts(i)
+        rl2 = rl2 + abs(uval(i))**2*wts(i)
+      enddo
+
+
+      err = sqrt(errl2/rl2)
+
+      call prin2('error in greens identity=*',err,1)
+
 
       stop
+      end
+
+      subroutine get_ellipsoid_geom(a,b,c,norder,npatches,iref,srcvals,&
+        srccoefs,ifplot,fname)
+      implicit real *8 (a-h,o-z)
+
+      real *8 v1(3),v2(3),v3(3),v4(3)
+      real *8, allocatable, target :: triaskel(:,:,:)
+      real *8, pointer :: ptr1,ptr2,ptr3,ptr4
+      real *8, allocatable :: uvs(:,:),wts(:),umatr(:,:),vmatr(:,:)
+      real *8 srcvals(12,*),srccoefs(9,*)
+      character (len=*) fname
+      real *8, target :: p1(10),p2(10),p3(10),p4(10)
+      external xtri_ellipsoid_eval
+
+
+
+      allocate(triaskel(3,3,npatches))
+
+      ause = a/sqrt(3.0d0)
+      buse = b/sqrt(3.0d0)
+      cuse = c/sqrt(3.0d0)
+      call get_rectparapiped(ause,buse,cuse,iref,npatches,triaskel)
+      
+      call xtri_vtk_flat(34, npatches, triaskel, 'a')
+
+      p2(1) = a
+      p2(2) = b
+      p2(3) = c
+      
+      ptr1 => triaskel(1,1,1)
+      ptr2 => p2(1)
+      ptr3 => p3(1)
+      ptr4 => p4(1)
+
+      norder = 5
+      npols = (norder+1)*(norder+2)/2
+      allocate(uvs(2,npols),wts(npols),umatr(npols,npols), &
+        vmatr(npols,npols))
+      call vioreanu_simplex_quad(norder,npols,uvs,umatr,vmatr,wts)
+      npts = npols*npatches
+      call getgeominfo(npatches,xtri_ellipsoid_eval,ptr1,ptr2,ptr3, &
+        ptr4,npols,uvs,umatr,srcvals,srccoefs)
+
+      call xtri_vtk_surf(trim(fname),npatches,xtri_ellipsoid_eval, &
+        ptr1,ptr2,ptr3,ptr4,norder,'Triangulated surface of ellipsoid')
+       
+
+      return
       end
 
 
