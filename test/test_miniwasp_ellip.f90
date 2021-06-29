@@ -34,8 +34,18 @@
       npatches = 0
       call get_miniwasp_ellip_params(abc_lens,abc_cone, &
         abc_rhabdom,abc_pig,xyz_lens,xyz_cone,xyz_rhabdom,xyz_pig)
+
+      call prin2('abc_lens=*',abc_lens,3)
+      call prin2('abc_cone=*',abc_cone,3)
+      call prin2('abc_rhabdom=*',abc_rhabdom,3)
+      call prin2('abc_pig=*',abc_pig,3)
+      call prin2('xyz_lens=*',xyz_lens,3)
+      call prin2('xyz_cone=*',xyz_cone,3)
+      call prin2('xyz_rhabdom=*',xyz_rhabdom,3)
+      call prin2('xyz_pig=*',xyz_pig,3)
+
       call get_miniwasp_ellip_mem(abc_lens,abc_cone, &
-        abc_rhabdom,abc_pig,iref,npatches)
+        abc_rhabdom,abc_pig,iref,npatches_vect,npatches)
       call prinf('npatches=*',npatches,1)
 
       norder = 5
@@ -45,7 +55,6 @@
       call get_miniwasp_ellip(abc_lens,abc_cone,abc_rhabdom, &
         abc_pig,xyz_lens,xyz_cone,xyz_rhabdom,xyz_pig,iref,npatches, &
         npatches_vect,norder,srcvals,srccoefs,npts,npts_vect)
-      stop
 
 
       allocate(iptype(npatches),ixyzs(npatches+1),norders(npatches))
@@ -265,14 +274,22 @@
       
       istart = 1
       npols = (norder+1)*(norder+2)/2
+      print *, "npols=",npols
+
 
       a = abc_lens(1)
       b = abc_lens(2)
       c = abc_lens(3)
       fname = 'lens.vtk'
+      print *, istart
+      print *, "norder=",norder
+      print *, "iref=",iref
+      print *, "istart=",istart
+      call prin2('xyz_lens=*',xyz_lens,3)
       call get_ellipsoid_geom(a,b,c,xyz_lens,norder,npatches_vect(1), &
        iref,srcvals(1,istart),srccoefs(1,istart),ifplot,trim(fname))
       npts_vect(1) = npatches_vect(1)*npols
+      print *, npatches_vect(1)
 
       istart = istart + npts_vect(1)
 
@@ -280,6 +297,7 @@
       b = abc_cone(2)
       c = abc_cone(3)
       fname = 'cone.vtk'
+      print *, "istart cone=",istart
       call get_ellipsoid_geom(a,b,c,xyz_cone,norder,npatches_vect(2), &
        iref,srcvals(1,istart),srccoefs(1,istart),ifplot,trim(fname))
       npts_vect(2) = npatches_vect(2)*npols
@@ -289,7 +307,7 @@
       a = abc_rhabdom(1)
       b = abc_rhabdom(2)
       c = abc_rhabdom(3)
-      fname = 'lens.vtk'
+      fname = 'rhabdom.vtk'
       call get_ellipsoid_geom(a,b,c,xyz_rhabdom,norder,npatches_vect(3), &
        iref,srcvals(1,istart),srccoefs(1,istart),ifplot,trim(fname))
       npts_vect(3) = npatches_vect(3)*npols
@@ -311,26 +329,31 @@
 !
 
       subroutine get_miniwasp_ellip_mem(abc_lens,abc_cone, &
-        abc_rhabdom,abc_pig,iref,npatches)
+        abc_rhabdom,abc_pig,iref,npatches_vect,npatches)
       implicit real *8 (a-h,o-z)
       real *8 abc_lens(3),abc_cone(3),abc_rhabdom(3),abc_pig(3)
+      integer npatches_vect(4)
       
       npatches = 0
       call get_rectparapiped_mem(abc_lens(1),abc_lens(2), &
-        abc_lens(3),iref,npatches0)
-      npatches = npatches + npatches0
+        abc_lens(3),iref,npatches_vect(1))
+      npatches = npatches + npatches_vect(1)
+      print *, "npatches1=",npatches
 
       call get_rectparapiped_mem(abc_cone(1),abc_cone(2), &
-        abc_cone(3),iref,npatches0)
-      npatches = npatches + npatches0
+        abc_cone(3),iref,npatches_vect(2))
+      npatches = npatches + npatches_vect(2)
+      print *, "npatches2=",npatches
 
       call get_rectparapiped_mem(abc_rhabdom(1),abc_rhabdom(2), &
-        abc_rhabdom(3),iref,npatches0)
-      npatches = npatches + npatches0
+        abc_rhabdom(3),iref,npatches_vect(3))
+      npatches = npatches + npatches_vect(3)
+      print *, "npatches3=",npatches
 
       call get_rectparapiped_mem(abc_pig(1),abc_pig(2), &
-        abc_pig(3),iref,npatches0)
-      npatches = npatches + npatches0
+        abc_pig(3),iref,npatches_vect(4))
+      npatches = npatches + npatches_vect(4)
+      print *, "npatches4=",npatches
 
       return
       end
