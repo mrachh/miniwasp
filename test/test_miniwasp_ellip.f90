@@ -1,4 +1,7 @@
       implicit real *8 (a-h,o-z)
+      real *8 abc_lens(3),abc_cone(3),abc_rhabdom(3),abc_pig(3)
+      real *8 xyz_lens(3),xyz_cone(3),xyz_rhabdom(3),xyz_pig(3)
+      integer npatches_vect(4),npts_vect(4) 
       real *8, allocatable :: srcvals(:,:),srccoefs(:,:),targs(:,:)
       real *8, allocatable :: wts(:)
       real *8, allocatable :: cms(:,:),rads(:),rad_near(:)
@@ -27,25 +30,23 @@
 
       call prini(6,13)
 
-      fname = 'ellipsoid.vtk'
-      
-      a = 2.0d0
-      b = 3.0d0
-      c = 5.0d0
-
-      xyz0(1:3) = 1.3d0
-
-      iref = 2
+      iref = 1
       npatches = 0
-      call get_rectparapiped_mem(a,b,c,iref,npatches)
+      call get_miniwasp_ellip_params(abc_lens,abc_cone, &
+        abc_rhabdom,abc_pig,xyz_lens,xyz_cone,xyz_rhabdom,xyz_pig)
+      call get_miniwasp_ellip_mem(abc_lens,abc_cone, &
+        abc_rhabdom,abc_pig,iref,npatches)
+      call prinf('npatches=*',npatches,1)
 
       norder = 5
       npols = (norder+1)*(norder+2)/2
       npts = npatches*npols
       allocate(srcvals(12,npts),srccoefs(9,npts))
+      call get_miniwasp_ellip(abc_lens,abc_cone,abc_rhabdom, &
+        abc_pig,xyz_lens,xyz_cone,xyz_rhabdom,xyz_pig,iref,npatches, &
+        npatches_vect,norder,srcvals,srccoefs,npts,npts_vect)
+      stop
 
-      call get_ellipsoid_geom(a,b,c,xyz0,norder,npatches,iref,srcvals, &
-       srccoefs,ifplot,trim(fname))
 
       allocate(iptype(npatches),ixyzs(npatches+1),norders(npatches))
 
