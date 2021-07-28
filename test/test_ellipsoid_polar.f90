@@ -24,6 +24,7 @@
       real *8 xyz_out(3),xyz_in(3)
       complex *16, allocatable :: sigma(:)
       complex * 16 zpars(3)
+      integer ppw
 
       call prini(6,13)
 
@@ -35,9 +36,16 @@
 
       xyz0(1:3) = 1.3d0
 
-      iref = 2
+      iref = 1
       npatches = 0
-      call get_rectparapiped_mem(a,b,c,iref,npatches)
+      rlam = 2.0d0
+      ppw = 10
+      norder = 5
+
+      call get_polar_uvmem(a,b,c,rlam,ppw,norder,npatches)
+      print *, "npatches=",npatches
+
+      stop
 
       norder = 5
       npols = (norder+1)*(norder+2)/2
@@ -251,6 +259,54 @@
 !
 !
 !
+      subroutine get_polar_uvmem(a,b,c,rlam,ppw,norder,npatches)
+      implicit real *8 (a-h,o-z)
+      integer ppw,norder,npatches
+
+      done = 1.0d0
+      pi = atan(done)*4
+
+      nthet = ceiling(2*c*(ppw+0.0d0)/rlam/(norder+0.0d0))
+      hthet = (pi+0.0d0)/(nthet+0.0d0)
+
+      npatches = 0
+
+      do ithet=1,nthet
+        thet0 = (ithet-1.0d0)*hthet
+        thet1 = (ithet+0.0d0)*hthet
+        
+        r0 = thet0-pi/2
+        r1 = thet1-pi/2
+        rr = r0*r1
+        
+
+
+        if(rr.lt.0) thettest = pi/2
+        if(rr.ge.0.and.(abs(r0).lt.abs(r1))) thettest = abs(r0) 
+        if(rr.ge.0.and.(abs(r1).lt.abs(r0))) thettest = abs(r1)
+
+
+        alpha = a*sin(thettest)
+        beta = b*sin(thettest)
+
+        hh = (alpha-beta)**2/(alpha+beta)**2 
+
+        ellip_p = pi*(alpha + beta)* &
+          (1.0d0 + 3*hh/(10.0d0 + sqrt(4.0d0-3*hh)))
+        print *, ithet,nthet,r0,r1,rr
+        
+        nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        npatches = npatches + 2*nphi
+
+      enddo
+
+
+
+      
+
+      return
+      end
+
 !
       subroutine get_miniwasp_ellip(abc_lens,abc_cone,abc_rhabdom, &
         abc_pig,xyz_lens,xyz_cone,xyz_rhabdom,xyz_pig,iref,npatches, &
@@ -333,6 +389,9 @@
 
       return
       end
+
+
+      
 !
 !
 !

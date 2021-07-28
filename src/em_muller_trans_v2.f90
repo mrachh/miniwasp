@@ -1293,7 +1293,9 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       norder_avg = floor(sum(norders)/(npatches+0.0d0))
 
       call get_rfacs(norder_avg,iptype_avg,rfac,rfac0)
-      rfac = 4.0d0
+      rfac = 2.0d0
+      rfac0 = 2.0d0
+!      rfac = 4.0d0
       print *, rfac, rfac0
 
 
@@ -3110,15 +3112,19 @@ end subroutine evaluate_field_muller
 
       iquadtype = 1
 
+!      goto 2111
+
+
       call getnearquad_muller_far_dir(npatches,norders,&
        &ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
        &ipatch_id,uvs_targ,eps,zpars,iquadtype,nnz,row_ptr,col_ind,&
        &iquad,rfac0,nquad,wnear)
 
-!c
-!c
-!c   compute layer potential
-!c
+ 2111  continue
+!
+!
+!   compute layer potential
+!
       call lpcomp_em_muller_far_addsub(npatches,norders,ixyzs,&
        &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,&
        &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,sigma,novers,&
@@ -3761,13 +3767,14 @@ end subroutine get_curlcurlSka
         ifinish=istart+ntarg_vect(count1+1)-1
       endif
     enddo
+
 !!!!return
 !write (*,*) 'aquí no llega'
 !read (*,*)
 		call cpu_time(t1)
 !$      t1 = omp_get_wtime()
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart,ep,mu) &
-!$OMP PRIVATE(jstart,pottmp,npols)
+!$OMP PRIVATE(jstart,pottmp,npols,l)
       do i=1,ntarg
         ep=targs(4,i)+ima*targs(5,i)
         mu=targs(6,i)+ima*targs(7,i)
@@ -3823,16 +3830,17 @@ end subroutine get_curlcurlSka
       allocate(srctmp2(12,nss),wtmp2(nss))
       allocate(ctmp2_a_u(nss),ctmp2_a_v(nss))
       allocate(ctmp2_b_u(nss),ctmp2_b_v(nss))
+
       ifdir=1
       istart=0
       do count1=1,n_regions
-       zpars_aux(1)=zpars(1)
-       zpars_aux(2)=targs(4,i+1)+ima*targs(5,i+1)
-       zpars_aux(3)=targs(6,i+1)+ima*targs(7,i+1)
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(count2,i,nss,j,jpatch,jstart) &
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(count2,i,ii,nss,j,jpatch,jstart) &
 !$OMP PRIVATE(npover,l,srctmp2,ctmp2_a_u,ctmp2_a_v,ctmp2_b_u,ctmp2_b_v) &
-!$OMP PRIVATE(wtmp2,E)
+!$OMP PRIVATE(wtmp2,E,zpars_aux)
        do count2=1,ntarg_vect(count1)
+        zpars_aux(1)=zpars(1)
+        zpars_aux(2)=targs(4,istart+1)+ima*targs(5,istart+1)
+        zpars_aux(3)=targs(6,istart+1)+ima*targs(7,istart+1)
         i = count2 + istart
         ii = 0
         do j=row_ptr(i),row_ptr(i+1)-1
@@ -3850,9 +3858,10 @@ end subroutine get_curlcurlSka
           enddo
         enddo
         nss = ii
-        call em_muller_far_FMM(eps,zpars_aux,nss,ntarg0,srctmp2,ndtarg,targs(:,i),&
-        &wtmp2,ctmp2_a_u,ctmp2_a_v,ctmp2_b_u,ctmp2_b_v,&
-        &E(1:3),E(4:6),thresh,ifdir)
+        E(1:6) = 0
+        call em_muller_far_FMM(eps,zpars_aux,nss,ntarg0, &
+          srctmp2,ndtarg,targs(:,i),wtmp2,ctmp2_a_u,ctmp2_a_v, &
+          ctmp2_b_u,ctmp2_b_v,E(1:3),E(4:6),thresh,ifdir)
 
           E_far(1,i)=E_far(1,i)-E(1)
           E_far(2,i)=E_far(2,i)-E(2)
@@ -3920,38 +3929,39 @@ implicit none
     allocate(a_vect(3,ns))
     allocate(b_vect(3,ns))
     allocate(lambda(ns))
-	  allocate(rho(ns))
+    allocate(rho(ns))
     allocate(E(3,nt))
     allocate(curlE(3,nt))
     allocate(divE(nt))
-	  allocate(n_vect_s(3,ns))
-	  allocate(n_vect_t(3,nt))
-	  allocate(u_vect_s(3,ns))
-	  allocate(v_vect_s(3,ns))
-	  allocate(u_vect_t(3,nt))
-	  allocate(v_vect_t(3,nt))
-	  allocate(source(3,ns))
-	  allocate(targets(3,nt))
+    allocate(n_vect_s(3,ns))
+    allocate(u_vect_s(3,ns))
+    allocate(v_vect_s(3,ns))
+    allocate(n_vect_t(3,nt))
+    allocate(u_vect_t(3,nt))
+    allocate(v_vect_t(3,nt))
+    allocate(source(3,ns))
+    allocate(targets(3,nt))
 
-	do count1=1,ns
+  do count1=1,ns
       n_vect_s(:,count1)=srcvals(10:12,count1)
       source(:,count1)=srcvals(1:3,count1)
-	enddo
+  enddo
+
   do count1=1,nt
       targets(:,count1)=targvals(1:3,count1)
-	enddo
-	call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:),u_vect_s,&
-	 &v_vect_s,ns)
-	
-    do count1=1,ns
-		  a_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1)+b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
-		  a_vect(2,count1)=(b_u(count1)*u_vect_s(2,count1)+b_v(count1)*v_vect_s(2,count1))/(-ima*omega)
-		  a_vect(3,count1)=(b_u(count1)*u_vect_s(3,count1)+b_v(count1)*v_vect_s(3,count1))/(-ima*omega)
-				
-      b_vect(1,count1)=(a_u(count1)*u_vect_s(1,count1)+a_v(count1)*v_vect_s(1,count1))*mu
-      b_vect(2,count1)=(a_u(count1)*u_vect_s(2,count1)+a_v(count1)*v_vect_s(2,count1))*mu
-      b_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1)+a_v(count1)*v_vect_s(3,count1))*mu
-	  enddo
+  enddo
+  call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:),u_vect_s,&
+   &v_vect_s,ns)
+
+   do count1=1,ns
+    a_vect(1,count1)=(b_u(count1)*u_vect_s(1,count1)+b_v(count1)*v_vect_s(1,count1))/(-ima*omega)
+    a_vect(2,count1)=(b_u(count1)*u_vect_s(2,count1)+b_v(count1)*v_vect_s(2,count1))/(-ima*omega)
+    a_vect(3,count1)=(b_u(count1)*u_vect_s(3,count1)+b_v(count1)*v_vect_s(3,count1))/(-ima*omega)
+
+    b_vect(1,count1)=(a_u(count1)*u_vect_s(1,count1)+a_v(count1)*v_vect_s(1,count1))*mu
+    b_vect(2,count1)=(a_u(count1)*u_vect_s(2,count1)+a_v(count1)*v_vect_s(2,count1))*mu
+    b_vect(3,count1)=(a_u(count1)*u_vect_s(3,count1)+a_v(count1)*v_vect_s(3,count1))*mu
+  enddo
 
     !Computing the full operator
     ifa_vect=1
@@ -3962,9 +3972,9 @@ implicit none
     ifcurlE=1
     ifdivE=0
 
-	call Vector_Helmholtz_targ2(eps,zk,ns,source,wts,ifa_vect,a_vect,&
-	 &ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
-	 &E_far,ifdivE,divE,nt,targets,thresh,ifdir)
+   call Vector_Helmholtz_targ2(eps,zk,ns,source,wts,ifa_vect,a_vect,&
+    &ifb_vect,b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,&
+    &E_far,ifdivE,divE,nt,targets,thresh,ifdir)
 
 !	call Vector_Helmholtz_targ(eps,izk,ns,source,wts,ifa_vect,a_vect,ifb_vect,&
 !	 &b_vect,iflambda,lambda,ifrho,rho,n_vect_s,ifE,E,ifcurlE,curlE,ifdivE,divE,nt,targets)
@@ -4126,8 +4136,15 @@ implicit none
  H_0 = 0
  erre = 0
  re = 0
+ errh = 0
+ rh = 0
  do count1=1,ntarg
   if (location_targs(count1).eq.0) then
+    if(count1.eq.1) then 
+     print *, "here1"
+     print *, "ep0=",ep0
+     print *, "mu0=",mu0
+    endif
     call fieldsEDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
      &E_0(:,count1),H_0(:,count1),vf,0)
     call fieldsMDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
@@ -4138,21 +4155,23 @@ implicit none
     call fieldsPWomega(zpars(1),ep,mu,targ(1:3,count1),1,&
      &E_0(:,count1),H_0(:,count1),direction,Pol)
   endif
-    error_E(count1)=sqrt(abs(E_0(1,count1)-E_far(1,count1))**2&
-     &+abs(E_0(2,count1)-E_far(2,count1))**2+abs(E_0(3,count1)-E_far(3,count1))**2)
-    error_rel_E(count1)=error_E(count1)/sqrt(abs(E_0(1,count1))**2&
+  error_E(count1)=sqrt(abs(E_0(1,count1)-E_far(1,count1))**2 + &
+     abs(E_0(2,count1)-E_far(2,count1))**2 + &
+     abs(E_0(3,count1)-E_far(3,count1))**2)
+  error_rel_E(count1)=error_E(count1)/sqrt(abs(E_0(1,count1))**2&
      &+abs(E_0(2,count1))**2+abs(E_0(3,count1))**2)
 
-    error_H(count1)=sqrt(abs(H_0(1,count1)-H_far(1,count1))**2+&
-     &abs(H_0(2,count1)-H_far(2,count1))**2+abs(H_0(3,count1)-H_far(3,count1))**2)
-    error_rel_H(count1)=error_H(count1)/sqrt(abs(H_0(1,count1))**2+&
+  error_H(count1)=sqrt(abs(H_0(1,count1)-H_far(1,count1))**2 + &
+   abs(H_0(2,count1)-H_far(2,count1))**2 + &
+   abs(H_0(3,count1)-H_far(3,count1))**2)
+  error_rel_H(count1)=error_H(count1)/sqrt(abs(H_0(1,count1))**2+&
      &abs(H_0(2,count1))**2+abs(H_0(3,count1))**2)
-    erre = erre + error_E(count1)**2
-    errh = errh + error_H(count1)**2
-    re = re + abs(E_0(1,count1))**2 + abs(E_0(2,count1))**2 +  &
-      abs(E_0(3,count1))**2
-    rh = rh + abs(H_0(1,count1))**2 + abs(H_0(2,count1))**2 +  &
-      abs(H_0(3,count1))**2
+  erre = erre + error_E(count1)**2
+  errh = errh + error_H(count1)**2
+  re = re + abs(E_0(1,count1))**2 + abs(E_0(2,count1))**2 +  &
+     abs(E_0(3,count1))**2
+  rh = rh + abs(H_0(1,count1))**2 + abs(H_0(2,count1))**2 +  &
+    abs(H_0(3,count1))**2
  enddo
  err_est = sqrt((erre+errh)/(re+rh))
 
