@@ -1,68 +1,60 @@
       implicit real *8 (a-h,o-z)
       real *8, allocatable :: srcvals(:,:),srccoefs(:,:),targs(:,:)
       real *8, allocatable :: wts(:)
-      real *8, allocatable :: cms(:,:),rads(:),rad_near(:)
-      real *8 errs(6),ts(2),xyz0(3)
-      real *8, allocatable :: rfacs(:,:)
+      real *8 ts(2),xyz0(3)
       character *100 fname
       integer ipars(2)
-      integer, allocatable :: row_ptr(:),col_ind(:)
-      integer, allocatable :: iquad(:)
-      real *8, allocatable :: srcover(:,:),wover(:)
-      complex *16, allocatable :: uval(:),dudnval(:)
-      complex *16, allocatable :: sigmaover(:),slp_near(:),dlp_near(:)
-      complex *16, allocatable :: pot(:),potslp(:),potdlp(:)
-      complex *16, allocatable :: potslp2(:)
+      complex *16, allocatable :: rhs(:),sigma(:)
 
-      complex *16 zk
+      complex *16 zk,ima,contrast_matrix(4)
+
+      real *8, allocatable :: ppwp(:)
 
       integer, allocatable :: norders(:),ixyzs(:),iptype(:)
-      integer, allocatable :: ixyzso(:),nfars(:)
-
       integer, allocatable :: ipatch_id(:),inode_id(:)
       real *8, allocatable :: uvs_targ(:,:)
-      real *8 xyz_out(3),xyz_in(3)
-      complex *16, allocatable :: sigma(:)
+      real *8 xyz_out(3),xyz_in(3),errs(1000)
+      real *8, allocatable :: errp_plot(:),errp(:)
       complex * 16 zpars(3)
-      integer ppw
+      data ima/(0.0d0,1.0d0)/
 
       call prini(6,13)
-
-      done = 1.0d0
-      pi = atan(done)*4
 
       fname = 'ellipsoid.vtk'
       
       a = 1.0d0
-      b = 1.5d0
+      b = 1.0d0
       c = 5.0d0
 
       xyz0(1:3) = 1.3d0
 
       iref = 1
       npatches = 0
-      zk  = 1.1d0
-      rlam = min(2.0d0*pi/abs(zk),1.0d0)
-      ppw = 10
+
+      na = 4*iref
+      nb = 4*iref
+      nc = 10*iref
+      npatches = 4*(na*nb + nb*nc + nc*na)
+
       norder = 5
-
-      call get_polar_uvmem(a,b,c,rlam,ppw,norder,npatches)
-      print *, "npatches=",npatches
-
-      
       npols = (norder+1)*(norder+2)/2
       npts = npatches*npols
       allocate(srcvals(12,npts),srccoefs(9,npts))
+
+      ifplot = 0
+
+      call get_ellipsoid_geom_wnabc(a,b,c,na,nb,nc, &
+       xyz0,norder,npatches,srcvals, &
+       srccoefs,ifplot,trim(fname))
+
       allocate(iptype(npatches),ixyzs(npatches+1),norders(npatches))
 
-      call get_ellipsoid_geom_polar(a,b,c,xyz0,rlam,ppw,norder, &
-        npatches,norders,ixyzs,iptype,npts,srcvals,srccoefs)
-
-      call surf_vtk_plot(npatches,norders,ixyzs,iptype,npts,srccoefs, &
-        srcvals,'ellipsoid_polar.vtk','a')
-      
-      call surf_quadratic_msh_vtk_plot(npatches,norders,ixyzs,iptype, &
-        npts,srccoefs,srcvals,'ellipsoid_polar_msh.vtk','a')
+      do i=1,npatches
+        ixyzs(i) = (i-1)*npols+1
+        norders(i) = norder
+        iptype(i) = 1
+      enddo
+      ixyzs(npatches+1) = 1+npts
 
       xyz_in(1) = 0.01d0 + xyz0(1)
       xyz_in(2) = 0.32d0 + xyz0(2)
@@ -73,28 +65,48 @@
       xyz_out(2) = -6.3d0 + xyz0(2)
       xyz_out(3) = 5.4d0 + xyz0(3)
 
+      zk  = 3.1d0
       allocate(targs(3,npts))
-      allocate(ixyzso(npatches+1),nfars(npatches))
       
       allocate(wts(npts))
       call get_qwts(npatches,norders,ixyzs,iptype,npts,srcvals,wts)
 
 
+      allocate(sigma(npts),rhs(npts))
 
-      allocate(cms(3,npatches),rads(npatches),rad_near(npatches))
-      allocate(pot(npts),potslp(npts),potdlp(npts))
-
-      call get_centroid_rads(npatches,norders,ixyzs,iptype,npts, &
-          srccoefs,cms,rads)
-
-      allocate(sigma(npts),uval(npts),dudnval(npts))
+      thet0 = 1.17d0*pi
+      phi0 = 3.22d0*pi
 
       do i=1,npts
-        call h3d_slp(xyz_out,3,srcvals(1,i),0,dpars,1,zk,0, &
-           ipars,uval(i))
-        call h3d_sprime(xyz_out,12,srcvals(1,i),0,dpars,1,zk,0, &
-            ipars,dudnval(i))
+        dprod = srcvals(1,i)*sin(thet0)*cos(phi0) + &
+          srcvals(2,i)*sin(thet0)*sin(phi0) + &
+          srcvals(3,i)*cos(thet0)
+        rhs(i) = -exp(ima*zk*dprod)
       enddo
+      ncomp = 1
+      omega = real(zk)
+      do i=1,4
+        contrast_matrix(i) = 1.0d0
+      enddo
+
+      allocate(ppwp(npatches))
+      call est_ppw(ncomp,npatches,norders,ixyzs,iptype,npts, &
+         srccoefs,srcvals,contrast_matrix,omega,ppwmin,ppwp)
+      
+      print *, "ppwmin=",ppwmin
+
+      open(unit=39,file='ppw_dis.dat')
+      
+      print *, "here"
+      
+      call surf_quadratic_msh_vtk_plot(npatches,norders,ixyzs, &
+        iptype,npts,srccoefs,srcvals,'surface_mesh.vtk','a')
+      
+      do i=1,npatches
+        write(39,*) i,ppwp(i)
+      enddo
+      close(39)
+      stop
 
       ndtarg = 3
      
@@ -111,145 +123,41 @@
         uvs_targ(2,i) = 0
       enddo
 
-      call get_patch_id_uvs(npatches,norders,ixyzs,iptype,npts, & 
-              ipatch_id,uvs_targ)
-
- 
-!
-!    find near field
-!
-      iptype = 1
-      call get_rfacs(norder,iptype,rfac,rfac0)
-      do i=1,npatches 
-        rad_near(i) = rads(i)*rfac
-      enddo
-      
-
-      call findnearmem(cms,npatches,rad_near,ndtarg,targs,npts,nnz)
-
-      allocate(row_ptr(npts+1),col_ind(nnz))
-      
-      call findnear(cms,npatches,rad_near,ndtarg,targs,npts,row_ptr, &
-             col_ind)
-
-      allocate(iquad(nnz+1)) 
-      call get_iquad_rsc(npatches,ixyzs,npts,nnz,row_ptr,col_ind, &
-             iquad)
-
-      nquad = iquad(nnz+1)-1
-      allocate(slp_near(nquad),dlp_near(nquad))
-
-
-      ndtarg = 3
-
-      eps = 0.50001d-7
-
-      ikerorder = 0
-
-
-
-      call cpu_time(t1)
-      call get_far_order(eps,npatches,norders,ixyzs,iptype,cms, &
-         rads,npts,srccoefs,ndtarg,npts,targs,ikerorder,zk, &
-         nnz,row_ptr,col_ind,rfac,nfars,ixyzso)
-      call cpu_time(t2)
-      tfar = t2-t1
-
-
-      npts_over = ixyzso(npatches+1)-1
-
-      print *, "npts_over=",npts_over
-
-
-      allocate(srcover(12,npts_over),sigmaover(npts_over), &
-              wover(npts_over))
-
-          
-      call oversample_geom(npatches,norders,ixyzs,iptype,npts, & 
-         srccoefs,srcvals,nfars,ixyzso,npts_over,srcover)
-
-      call get_qwts(npatches,nfars,ixyzso,iptype,npts_over, &
-             srcover,wover)
-
-
-      do i=1,nquad
-        slp_near(i) = 0
-        dlp_near(i) = 0
-      enddo
-
-
-
-      call cpu_time(t1)
-
       zpars(1) = zk
-      zpars(2) = 1.0d0
-      zpars(3) = 0.0d0
-
-      iquadtype = 1
-
-
-      call getnearquad_helm_comb_dir(npatches,norders, &
-           ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
-           ipatch_id,uvs_targ,eps,zpars,iquadtype,nnz,row_ptr,col_ind, &
-           iquad,rfac0,nquad,slp_near)
-
-      
-      zpars(2) = 0.0d0
+      zpars(2) = -ima*zk
       zpars(3) = 1.0d0
-      call getnearquad_helm_comb_dir(npatches,norders, &
-           ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
-           ipatch_id,uvs_targ,eps,zpars,iquadtype, &
-           nnz,row_ptr,col_ind,iquad,rfac0,nquad,dlp_near)
+      ifinout = 1
+
+      eps = 1.0d-5
+      eps_gmres = 1.0d-6
+      numit = 50
+
+      niter = 0
       
-      call cpu_time(t2)
-      tquadgen = t2-t1
+      call helm_comb_dir_solver(npatches,norders,ixyzs,iptype,npts, &
+         srccoefs,srcvals,eps,zpars,numit,ifinout,rhs,eps_gmres,niter, &
+         errs,rres,sigma)
+      print *, "niter=",niter
 
 
 
-      ifinout = 1     
-
-      zpars(2) = 1.0d0
-      zpars(3) = 0.0d0
-
-
-      call cpu_time(t1)
-
-      call lpcomp_helm_comb_dir_addsub(npatches,norders,ixyzs, &
-       iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
-       eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,slp_near, &
-       dudnval,nfars,npts_over,ixyzso,srcover,wover,potslp)
-
-
-      zpars(2) = 0.0d0
-      zpars(3) = 1.0d0
-
-
-      call lpcomp_helm_comb_dir_addsub(npatches,norders,ixyzs, &
-       iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
-       eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,dlp_near, &
-       uval,nfars,npts_over,ixyzso,srcover,wover,potdlp)
-
-
-      call cpu_time(t2)
-      tlpcomp = t2-t1
-
-
-!
-!
-!      compute error
-!
-      errl2 = 0
-      rl2 = 0
-      do i=1,npts
-        pot(i) = (potslp(i) - potdlp(i))*2
-        errl2 = errl2 + abs(uval(i)-pot(i))**2*wts(i)
-        rl2 = rl2 + abs(uval(i))**2*wts(i)
+      allocate(errp(npatches))
+      call surf_fun_error(2,npatches,norders,ixyzs,iptype,npts, &
+        sigma,wts,errp,errm)
+      
+      print *, "estimated error=",errm
+      
+      allocate(errp_plot(npts))
+      do i=1,npatches
+        do j=ixyzs(i),ixyzs(i+1)-1
+          errp_plot(j) = log(errp(i))/log(10.0d0)
+        enddo
       enddo
 
+      call surf_vtk_plot_scalar(npatches,norders,ixyzs,iptype, &
+       npts,srccoefs,srcvals,errp_plot,'errs.vtk','a')
+      
 
-      err = sqrt(errl2/rl2)
-
-      call prin2('error in greens identity=*',err,1)
 
 
       stop
@@ -258,35 +166,6 @@
 !
 !
 !
-      subroutine get_polar_uvmem(a,b,c,rlam,ppw,norder,npatches)
-      implicit real *8 (a-h,o-z)
-      integer ppw,norder,npatches
-
-      done = 1.0d0
-      pi = atan(done)*4
-
-      nthet = ceiling(2*c*(ppw+0.0d0)/rlam/(norder+0.0d0))
-      hthet = (pi+0.0d0)/(nthet+0.0d0)
-
-      npatches = 0
-      alpha = a
-      beta = b
-      hh = (alpha-beta)**2/(alpha+beta)**2 
-
-      ellip_p = pi*(alpha + beta)* &
-         (1.0d0 + 3*hh/(10.0d0 + sqrt(4.0d0-3*hh)))
-        
-      nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
-      npatches = 2*nthet*nphi
-
-
-
-
-      
-
-      return
-      end
-
 !
       subroutine get_miniwasp_ellip(abc_lens,abc_cone,abc_rhabdom, &
         abc_pig,xyz_lens,xyz_cone,xyz_rhabdom,xyz_pig,iref,npatches, &
@@ -369,9 +248,6 @@
 
       return
       end
-
-
-      
 !
 !
 !
@@ -421,87 +297,6 @@
 !
 !
 !
-
-      subroutine get_ellipsoid_geom_polar(a,b,c,xyz0,rlam,ppw, &
-        norder,npatches,norders,ixyzs,iptype,npts,srcvals,srccoefs)
-      implicit real *8 (a-h,o-z)
-
-      real *8 v1(3),v2(3),v3(3),v4(3),xyz0(1:3)
-      real *8, allocatable, target :: triaskel(:,:,:)
-      real *8, pointer :: ptr1,ptr2,ptr3,ptr4
-      real *8, allocatable :: uvs(:,:),wts(:),umatr(:,:),vmatr(:,:)
-      real *8 srcvals(12,npts),srccoefs(9,npts)
-      integer iptype(npatches),ixyzs(npatches+1),norders(npatches)
-      real *8, target :: p1(10),p2(10),p3(10),p4(10)
-      integer ppw
-      external xtri_ellipsoid_polar_eval
-
-      npols = (norder+1)*(norder+2)/2
-      do i=1,npatches
-        norders(i) = norder
-        ixyzs(i) = (i-1)*npols + 1
-        iptype(i) = 1
-      enddo
-      ixyzs(npatches+1) = npts+1
-
-      allocate(triaskel(3,3,npatches))
-
-      done = 1.0d0
-      pi = atan(done)*4
-
-      nthet = ceiling(2*c*(ppw+0.0d0)/rlam/(norder+0.0d0))
-      hthet = (pi+0.0d0)/(nthet+0.0d0)
-
-      n0 = 0
-
-      umin = 0
-      umax = pi
-      vmin = 0
-      vmax = 2*pi
-
-      nthet0 = 1
-      nover = 0
-      alpha = a
-      beta = b
-      hh = (alpha-beta)**2/(alpha+beta)**2 
-
-      ellip_p = pi*(alpha + beta)* &
-         (1.0d0 + 3*hh/(10.0d0 + sqrt(4.0d0-3*hh)))
-        
-      nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
-      call xtri_rectmesh_ani(umin,umax,vmin,vmax,nthet,nphi,nover, &
-        npatches,n0,triaskel)
-      print *, npatches,n0
-
-      p2(1) = a
-      p2(2) = b
-      p2(3) = c
-
-      p3(1:3) = xyz0(1:3)
-      
-      ptr1 => triaskel(1,1,1)
-      ptr2 => p2(1)
-      ptr3 => p3(1)
-      ptr4 => p4(1)
-
-      norder = 5
-      npols = (norder+1)*(norder+2)/2
-      allocate(uvs(2,npols),wts(npols),umatr(npols,npols), &
-        vmatr(npols,npols))
-      call vioreanu_simplex_quad(norder,npols,uvs,umatr,vmatr,wts)
-      call getgeominfo(npatches,xtri_ellipsoid_polar_eval,ptr1,ptr2,ptr3, &
-        ptr4,npols,uvs,umatr,srcvals,srccoefs)
-
-
-      return
-      end
-!
-!
-!
-!
-!
-!
-
       subroutine get_ellipsoid_geom(a,b,c,xyz0,norder,npatches,iref, &
         srcvals,srccoefs,ifplot,fname)
       implicit real *8 (a-h,o-z)
@@ -552,6 +347,65 @@
 
       return
       end
+!
+!
+!
+!
+      subroutine get_ellipsoid_geom_wnabc(a,b,c,na,nb,nc, &
+        xyz0,norder,npatches, &
+        srcvals,srccoefs,ifplot,fname)
+      implicit real *8 (a-h,o-z)
+
+      real *8 v1(3),v2(3),v3(3),v4(3),xyz0(1:3)
+      real *8, allocatable, target :: triaskel(:,:,:)
+      real *8, pointer :: ptr1,ptr2,ptr3,ptr4
+      real *8, allocatable :: uvs(:,:),wts(:),umatr(:,:),vmatr(:,:)
+      real *8 srcvals(12,*),srccoefs(9,*)
+      character (len=*) fname
+      real *8, target :: p1(10),p2(10),p3(10),p4(10)
+      external xtri_ellipsoid_eval
+
+
+
+      allocate(triaskel(3,3,npatches))
+
+      ause = a/sqrt(3.0d0)
+      buse = b/sqrt(3.0d0)
+      cuse = c/sqrt(3.0d0)
+      call get_rectparapiped_wnabc(ause,buse,cuse, &
+        na,nb,nc,npatches,triaskel)
+      
+!      call xtri_vtk_flat(34, npatches, triaskel, 'a')
+
+      p2(1) = a
+      p2(2) = b
+      p2(3) = c
+
+      p3(1:3) = xyz0(1:3)
+      
+      ptr1 => triaskel(1,1,1)
+      ptr2 => p2(1)
+      ptr3 => p3(1)
+      ptr4 => p4(1)
+
+      norder = 5
+      npols = (norder+1)*(norder+2)/2
+      allocate(uvs(2,npols),wts(npols),umatr(npols,npols), &
+        vmatr(npols,npols))
+      call vioreanu_simplex_quad(norder,npols,uvs,umatr,vmatr,wts)
+      npts = npols*npatches
+      call getgeominfo(npatches,xtri_ellipsoid_eval,ptr1,ptr2,ptr3, &
+        ptr4,npols,uvs,umatr,srcvals,srccoefs)
+
+!      call xtri_vtk_surf(trim(fname),npatches,xtri_ellipsoid_eval, &
+!        ptr1,ptr2,ptr3,ptr4,norder,'Triangulated surface of ellipsoid')
+       
+
+      return
+      end
+!
+!
+!
 !
 !
 !
@@ -616,7 +470,7 @@
       vs(1:3,3) = vcube(1:3,3)
       vs(1:3,4) = vcube(1:3,2)
       ntri = 0
-      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nb,na, &
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),na,nb, &
         npatches,triaskel(1,1,ntri+1))
 
       call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
@@ -629,7 +483,7 @@
 
 !       z = c face      
       vs(1:3,1:4) = vcube(1:3,5:8)
-      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),na,nb, &
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nb,na, &
         npatches,triaskel(1,1,ntri+1))
 
       call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
@@ -646,7 +500,7 @@
       vs(1:3,3) = vcube(1:3,6)
       vs(1:3,4) = vcube(1:3,5)
 
-      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),na,nc, &
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nc,na, &
         npatches,triaskel(1,1,ntri+1))
       call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
       call prin2('xnorm1 y=-b=*',xnorm,3)
@@ -663,7 +517,7 @@
       vs(1:3,3) = vcube(1:3,7)
       vs(1:3,4) = vcube(1:3,3)
 
-      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nc,na, &
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),na,nc, &
         npatches,triaskel(1,1,ntri+1))
       call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
       call prin2('xnorm1 y=b=*',xnorm,3)
@@ -681,7 +535,7 @@
       vs(1:3,3) = vcube(1:3,8)
       vs(1:3,4) = vcube(1:3,4)
 
-      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nc,nb, &
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nb,nc, &
         npatches,triaskel(1,1,ntri+1))
       call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
       call prin2('xnorm1 x=-a=*',xnorm,3)
@@ -698,7 +552,7 @@
       vs(1:3,3) = vcube(1:3,7)
       vs(1:3,4) = vcube(1:3,6)
 
-      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nb,nc, &
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nc,nb, &
         npatches,triaskel(1,1,ntri+1))
       call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
       call prin2('xnorm1 x=a=*',xnorm,3)
@@ -710,7 +564,162 @@
 
       return
       end
+!
+!
+!
+!
 
+      subroutine get_rectparapiped_wnabc(a,b,c,na,nb,nc, &
+        npatches,triaskel)
+      implicit real *8 (a-h,o-z)
+
+      real *8 triaskel(3,3,npatches),vs(3,4)
+
+      real *8 vcube(3,8),xnorm(3)
+
+      
+      
+      vcube(1,1) = -a
+      vcube(2,1) = -b
+      vcube(3,1) = -c
+
+      vcube(1,2) = a
+      vcube(2,2) = -b
+      vcube(3,2) = -c
+
+      vcube(1,3) = a
+      vcube(2,3) = b
+      vcube(3,3) = -c
+
+      vcube(1,4) = -a
+      vcube(2,4) = b
+      vcube(3,4) = -c
+
+      vcube(1,5) = -a
+      vcube(2,5) = -b
+      vcube(3,5) = c
+
+      vcube(1,6) = a
+      vcube(2,6) = -b
+      vcube(3,6) = c
+
+      vcube(1,7) = a
+      vcube(2,7) = b
+      vcube(3,7) = c
+
+      vcube(1,8) = -a
+      vcube(2,8) = b
+      vcube(3,8) = c
+
+
+
+
+!       z = -c face      
+      vs(1:3,1) = vcube(1:3,1)
+      vs(1:3,2) = vcube(1:3,4)
+      vs(1:3,3) = vcube(1:3,3)
+      vs(1:3,4) = vcube(1:3,2)
+      ntri = 0
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),na,nb, &
+        npatches,triaskel(1,1,ntri+1))
+
+      call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
+      call prin2('xnorm1 z=-c=*',xnorm,3)
+      call get_norm_triaskel(triaskel(1,1,ntri+2),xnorm)
+      call prin2('xnorm2 z=-c=*',xnorm,3)
+
+      ntri = ntri + 2*na*nb
+      
+
+!       z = c face      
+      vs(1:3,1:4) = vcube(1:3,5:8)
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nb,na, &
+        npatches,triaskel(1,1,ntri+1))
+
+      call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
+      call prin2('xnorm1 z=c=*',xnorm,3)
+      call get_norm_triaskel(triaskel(1,1,ntri+2),xnorm)
+      call prin2('xnorm2 z=c=*',xnorm,3)
+
+      ntri = ntri + 2*na*nb
+
+!      y = -b face
+!
+      vs(1:3,1) = vcube(1:3,1)
+      vs(1:3,2) = vcube(1:3,2)
+      vs(1:3,3) = vcube(1:3,6)
+      vs(1:3,4) = vcube(1:3,5)
+
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nc,na, &
+        npatches,triaskel(1,1,ntri+1))
+      call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
+      call prin2('xnorm1 y=-b=*',xnorm,3)
+      call get_norm_triaskel(triaskel(1,1,ntri+2),xnorm)
+      call prin2('xnorm2 y=-b=*',xnorm,3)
+
+
+      ntri = ntri + 2*na*nc
+
+!      y = b face
+!
+      vs(1:3,1) = vcube(1:3,4)
+      vs(1:3,2) = vcube(1:3,8)
+      vs(1:3,3) = vcube(1:3,7)
+      vs(1:3,4) = vcube(1:3,3)
+
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),na,nc, &
+        npatches,triaskel(1,1,ntri+1))
+      call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
+      call prin2('xnorm1 y=b=*',xnorm,3)
+      call get_norm_triaskel(triaskel(1,1,ntri+2),xnorm)
+      call prin2('xnorm2 y=b=*',xnorm,3)
+
+      ntri = ntri + 2*na*nc
+
+
+
+!      x = -a face
+!
+      vs(1:3,1) = vcube(1:3,1)
+      vs(1:3,2) = vcube(1:3,5)
+      vs(1:3,3) = vcube(1:3,8)
+      vs(1:3,4) = vcube(1:3,4)
+
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nb,nc, &
+        npatches,triaskel(1,1,ntri+1))
+      call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
+      call prin2('xnorm1 x=-a=*',xnorm,3)
+      call get_norm_triaskel(triaskel(1,1,ntri+2),xnorm)
+      call prin2('xnorm2 x=-a=*',xnorm,3)
+
+
+      ntri = ntri + 2*nb*nc
+
+!      x = 2 face
+!
+      vs(1:3,1) = vcube(1:3,2)
+      vs(1:3,2) = vcube(1:3,3)
+      vs(1:3,3) = vcube(1:3,7)
+      vs(1:3,4) = vcube(1:3,6)
+
+      call xtri_rectmesh_3d(vs(1,1),vs(1,2),vs(1,3),vs(1,4),nc,nb, &
+        npatches,triaskel(1,1,ntri+1))
+      call get_norm_triaskel(triaskel(1,1,ntri+1),xnorm)
+      call prin2('xnorm1 x=a=*',xnorm,3)
+      call get_norm_triaskel(triaskel(1,1,ntri+2),xnorm)
+      call prin2('xnorm2 x=a=*',xnorm,3)
+
+      ntri = ntri + 2*nb*nc
+
+
+      return
+      end
+!
+!
+!
+!
+!
+!
 
       subroutine get_norm_triaskel(tria,xnorm)
       implicit real *8 (a-h,o-z)
@@ -910,12 +919,10 @@
 
       return
       end subroutine xtri_vtk_flat
-!
-!
-!
-!
-!
-!
+
+
+
+
 
       subroutine xtri_ellipsoid_eval(itri, u, v, xyz, dxyzduv, & 
           triainfo,p2, p3, p4)
@@ -1007,89 +1014,53 @@
       return
       end subroutine xtri_ellipsoid_eval
 
+!
+!
+!
+!
+!
+!
+!
 
-
-
-
-
-
-
-
-      subroutine xtri_ellipsoid_polar_eval(itri, u, v, xyz, dxyzduv, & 
-          triainfo,p2, p3, p4)
+      subroutine est_ppw(ncomp,npatches,norders,ixyzs,iptype,npts, &
+         srccoefs,srcvals,contrast_matrix,omega,ppwmin,ppwp)
       implicit real *8 (a-h,o-z)
-      real *8 :: xyz(3), dxyzduv(3,2), triainfo(3,3,*),p2(3),p3(3)
+      integer ncomp,npatches,norders(npatches),ixyzs(npatches+1)
+      integer iptype(npatches),npts
+      real *8 srccoefs(9,npts),srcvals(12,npts)
+      complex *16 contrast_matrix(4,ncomp),zk
+      real *8 rzkmax
+      real *8 omega
+      real *8 ppwmin,ppwp(npatches)
+      real *8, allocatable :: cms(:,:),rads(:)
 
+      done = 1.0d0
+      pi = atan(done)*4.0d0
 
-      !
-      ! project the triangle itri in triainfo onto the sphere
-      !
-      !    Input:
-      ! itri - triangle number to map
-      ! u,v - local uv coordinates on triangle itri
-      ! triainfo - flat skeleton triangle info
-      ! p2,p3,p4 - dummy parameters
-      !
-      !    Output:
-      ! xyz - point on the sphere
-      ! dxyzduv - first derivative information
-      !
-      !
+      allocate(cms(3,npatches),rads(npatches))
 
-      x0=triainfo(1,1,itri)
-      y0=triainfo(2,1,itri)
-      z0=triainfo(3,1,itri)
+      rzkmax = 0
+      do i=1,ncomp
+        zk = omega*sqrt(contrast_matrix(1,i))*   &
+          sqrt(contrast_matrix(2,i))
+        if(abs(zk).gt.rzkmax) rzkmax = abs(zk)
 
-      x1=triainfo(1,2,itri)
-      y1=triainfo(2,2,itri)
-      z1=triainfo(3,2,itri)
+        zk = omega*sqrt(contrast_matrix(3,i))*   &
+          sqrt(contrast_matrix(4,i))
+        if(abs(zk).gt.rzkmax) rzkmax = abs(zk)
+      enddo
 
-      x2=triainfo(1,3,itri)
-      y2=triainfo(2,3,itri)
-      z2=triainfo(3,3,itri)
+      call get_centroid_rads(npatches,norders,ixyzs,iptype,npts, &
+          srccoefs,cms,rads)
+      
+      do i=1,npatches
+        ppwp(i) = norders(i)*pi/(rads(i)*rzkmax)
+      enddo
 
-      !
-      ! ... process the geometry, return the point location on the sphere
-      ! and the derivatives with respect to u and v
-      !
-      x=x0+u*(x1-x0)+v*(x2-x0)
-      y=y0+u*(y1-y0)+v*(y2-y0)
-      z=z0+u*(z1-z0)+v*(z2-z0)
-
-      dxdu = x1-x0
-      dydu = y1-y0
-      dzdu = z1-z0
-    
-      dxdv = x2-x0
-      dydv = y2-y0
-      dzdv = z2-z0
-
-      !
-      ! second derivatives are zero...
-      !
-
-      !
-      ! project onto the sphere
-      !
-      xyz(1)=p2(1)*sin(x)*cos(y) + p3(1)
-      xyz(2)=p2(2)*sin(x)*sin(y) + p3(2)
-      xyz(3)=p2(3)*cos(x) + p3(3)
-
-
-      ! du
-      dxyzduv(1,1) = p2(1)*(cos(x)*cos(y)*dxdu - sin(x)*sin(y)*dydu)
-      dxyzduv(2,1) = p2(2)*(cos(x)*sin(y)*dxdu + sin(x)*cos(y)*dydu)
-      dxyzduv(3,1) = p2(3)*(-sin(x)*dxdu)
-
-      ! dv
-      dxyzduv(1,2) = p2(1)*(cos(x)*cos(y)*dxdv - sin(x)*sin(y)*dydv)
-      dxyzduv(2,2) = p2(2)*(cos(x)*sin(y)*dxdv + sin(x)*cos(y)*dydv)
-      dxyzduv(3,2) = p2(3)*(-sin(x)*dxdv)
+      ppwmin = minval(ppwp)
 
       return
-      end subroutine xtri_ellipsoid_polar_eval
-
-
+      end subroutine est_ppw
 
 
 
