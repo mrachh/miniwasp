@@ -58,3 +58,6 @@ axis equal
 
 x = [con_rtmp;con_rmax;lens_r2];
 y = [con_z3;con_z2;lens_z2];
+writematrix(rhab_pts,'rhabdom_axissym_pts.dat','Delimiter',' ');
+writematrix(con_pts,'cone_axissym_pts.dat','Delimiter',' ');
+writematrix(lens_pts,'lens_axissym_pts.dat','Delimiter',' ');
