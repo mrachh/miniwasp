@@ -58,3 +58,38 @@ axis equal
 
 x = [con_rtmp;con_rmax;lens_r2];
 y = [con_z3;con_z2;lens_z2];
+
+
+
+
+
+ys = 1000:1000:17000;
+xs = zeros(size(ys));
+y1s = zeros(size(ys));
+y2s = zeros(size(ys));
+
+x1s = zeros(size(ys));
+x2s = zeros(size(ys));
+
+
+y1s(1:13) = rhab_pts(2,2);
+y2s(1:13) = rhab_pts(3,2);
+x1s(1:13) = rhab_pts(2,1);
+x2s(1:13) = rhab_pts(3,1);
+
+
+
+y1s(14:16) = con_pts(2,2);
+y2s(14:16) = con_pts(3,2);
+x1s(14:16) = con_pts(2,1);
+x2s(14:16) = con_pts(3,1);
+
+
+y1s(17) = lens_pts(2,2);
+y2s(17) = lens_pts(3,2);
+x1s(17) = lens_pts(2,1);
+x2s(17) = lens_pts(3,1);
+
+
+xs = (x2s.*(ys-y1s)-x1s.*(ys-y2s))./(y2s-y1s);
+plot(xs,ys,'m.','MarkerSize',20)
