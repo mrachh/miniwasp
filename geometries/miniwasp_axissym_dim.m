@@ -58,9 +58,6 @@ axis equal
 
 x = [con_rtmp;con_rmax;lens_r2];
 y = [con_z3;con_z2;lens_z2];
-writematrix(rhab_pts,'rhabdom_axissym_pts.dat','Delimiter',' ');
-writematrix(con_pts,'cone_axissym_pts.dat','Delimiter',' ');
-writematrix(lens_pts,'lens_axissym_pts.dat','Delimiter',' ');
 
 
 
@@ -94,3 +91,11 @@ x2s(17) = lens_pts(3,1);
 
 xs = (x2s.*(ys-y1s)-x1s.*(ys-y2s))./(y2s-y1s);
 plot(xs,ys,'m.','MarkerSize',20)
+
+xys = zeros(length(xs),2);
+xys(:,1) = xs;
+xys(:,2) = ys;
+writematrix(rhab_pts,'rhabdom_axissym_pts.dat','Delimiter',' ');
+writematrix(con_pts,'cone_axissym_pts.dat','Delimiter',' ');
+writematrix(lens_pts,'lens_axissym_pts.dat','Delimiter',' ');
+writematrix(xys,'boundary_axissym_radii.dat','Delimiter',' ');
