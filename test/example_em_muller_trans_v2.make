@@ -1,6 +1,6 @@
-EXEC = int2-emwrap
+EXEC = int2-fds
 HOST = gcc
-HOST = gcc-openmp
+#HOST = gcc-openmp
 #HOST = intel
 #HOST = intel-ompenmp
 
@@ -44,7 +44,7 @@ endif
 
 ifeq ($(HOST),gcc-openmp)
     FC = gfortran 
-    FFLAGS=-fPIC -O3 -funroll-loops -march=native -fopenmp -std=legacy
+    FFLAGS=-fPIC -O3 -funroll-loops -march=x86-64 -fopenmp -std=legacy
 endif
 
 ifeq ($(HOST),intel)
@@ -62,11 +62,10 @@ FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
 
 .PHONY: all clean 
 
-OBJECTS =  test_ellipsoid.o \
+OBJECTS =  example_em_muller_trans_v2.o \
   $ ../src/topol_sort.o \
   $ ../src/plot_tools.o \
   $ ../src/em_muller_trans_v2.o \
-  $ ../src/surf_routs.o \
 #
 # use only the file part of the filename, then manually specify
 # the build location

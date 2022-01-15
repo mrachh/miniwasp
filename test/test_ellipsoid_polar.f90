@@ -33,21 +33,24 @@
 
       fname = 'ellipsoid.vtk'
       
-      a = 1.0d0
-      b = 1.5d0
-      c = 5.0d0
+      a = 0.2d0
+      b = 0.3d0
+      c = 5.1d0
 
       xyz0(1:3) = 1.3d0
 
       iref = 1
       npatches = 0
-      zk  = 1.1d0
+      rlam0 = 0.55/2
+      zk  = 2*pi/rlam0
+!      zk = 1.1d0
       rlam = min(2.0d0*pi/abs(zk),1.0d0)
-      ppw = 10
+      ppw = 5
       norder = 5
 
-      call get_polar_uvmem(a,b,c,rlam,ppw,norder,npatches)
+      call get_polar_uvmem_nc(a,b,c,rlam,ppw,norder,npatches)
       print *, "npatches=",npatches
+      stop
 
       
       npols = (norder+1)*(norder+2)/2
@@ -58,11 +61,11 @@
       call get_ellipsoid_geom_polar(a,b,c,xyz0,rlam,ppw,norder, &
         npatches,norders,ixyzs,iptype,npts,srcvals,srccoefs)
 
-      call surf_vtk_plot(npatches,norders,ixyzs,iptype,npts,srccoefs, &
-        srcvals,'ellipsoid_polar.vtk','a')
-      
-      call surf_quadratic_msh_vtk_plot(npatches,norders,ixyzs,iptype, &
-        npts,srccoefs,srcvals,'ellipsoid_polar_msh.vtk','a')
+!      call surf_vtk_plot(npatches,norders,ixyzs,iptype,npts,srccoefs, &
+!        srcvals,'ellipsoid_polar_nc.vtk','a')
+!      
+!      call surf_quadratic_msh_vtk_plot(npatches,norders,ixyzs,iptype, &
+!        npts,srccoefs,srcvals,'ellipsoid_polar_msh_nc.vtk','a')
 
       xyz_in(1) = 0.01d0 + xyz0(1)
       xyz_in(2) = 0.32d0 + xyz0(2)
@@ -123,14 +126,53 @@
       do i=1,npatches 
         rad_near(i) = rads(i)*rfac
       enddo
-      
 
-      call findnearmem(cms,npatches,rad_near,ndtarg,targs,npts,nnz)
-
-      allocate(row_ptr(npts+1),col_ind(nnz))
+      ifread = 0
+      ifwrite = 0
       
-      call findnear(cms,npatches,rad_near,ndtarg,targs,npts,row_ptr, &
-             col_ind)
+!      if(ifread.eq.0) then
+        call findnearmem(cms,npatches,rad_near,ndtarg,targs,npts,nnz)
+        print *, "nnz=",nnz
+ 
+        allocate(row_ptr(npts+1),col_ind(nnz))
+      
+        call findnear(cms,npatches,rad_near,ndtarg,targs,npts,row_ptr, &
+               col_ind)
+!      else
+!
+!        allocate(row_ptr(npts+1))
+!        open(unit=33,file='row_ptr.dat')
+!        do i=1,npts+1
+!          read(33,*) row_ptr(i)
+!        enddo
+!        close(33)
+!
+!        open(unit=33,file='col_ind.dat')
+!        read(33,*) nnz
+!        allocate(col_ind(nnz))
+!        do i=1,nnz
+!          read(33,*) col_ind(i)
+!        enddo
+!        close(33)
+!      endif
+!
+!      if(ifwrite.eq.1) then
+!        open(unit=33,file='row_ptr.dat')
+!        do i=1,npts+1
+!          write(33,*) row_ptr(i)
+!        enddo
+!        close(33)
+!
+!        open(unit=33,file='col_ind.dat')
+!        write(33,*) nnz
+!        do i=1,nnz
+!          write(33,*) col_ind(i)
+!        enddo
+!        close(33)
+!      endif
+
+     
+
 
       allocate(iquad(nnz+1)) 
       call get_iquad_rsc(npatches,ixyzs,npts,nnz,row_ptr,col_ind, &
@@ -138,11 +180,12 @@
 
       nquad = iquad(nnz+1)-1
       allocate(slp_near(nquad),dlp_near(nquad))
+      print *, "nquad=",nquad
 
 
       ndtarg = 3
 
-      eps = 0.50001d-7
+      eps = 0.50001d-5
 
       ikerorder = 0
 
@@ -187,11 +230,14 @@
 
       iquadtype = 1
 
+      print *, "starting getnearquad"
+
 
       call getnearquad_helm_comb_dir(npatches,norders, &
            ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,npts,targs, &
            ipatch_id,uvs_targ,eps,zpars,iquadtype,nnz,row_ptr,col_ind, &
            iquad,rfac0,nquad,slp_near)
+      print *, "done with computing getnearquad slp"
 
       
       zpars(2) = 0.0d0
@@ -278,15 +324,53 @@
         
       nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
       npatches = 2*nthet*nphi
-
-
-
-
       
 
       return
       end
+!
+!
+!
+!
+!
+      subroutine get_polar_uvmem_nc(a,b,c,rlam,ppw,norder,npatches)
+      implicit real *8 (a-h,o-z)
+      integer ppw,norder,npatches
 
+      done = 1.0d0
+      pi = atan(done)*4
+
+      nthet = ceiling(2*c*(ppw+0.0d0)/rlam/(norder+0.0d0))
+      hthet = (pi+0.0d0)/(nthet+0.0d0)
+
+      npatches = 0
+      do ithet=1,nthet
+        t0 = (ithet-1)*hthet
+        t1 = (ithet)*hthet
+
+        tuse = t0
+        if(abs(t0-pi/2).ge.abs(t1-pi/2)) tuse = t1
+        if((t0-pi/2)*(t1-pi/2).le.0) tuse = pi/2
+
+
+        alpha = a*sin(tuse)
+        beta = b*sin(tuse)
+        hh = (alpha-beta)**2/(alpha+beta)**2 
+
+        ellip_p = pi*(alpha + beta)* &
+           (1.0d0 + 3*hh/(10.0d0 + sqrt(4.0d0-3*hh)))
+        
+        nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        npatches = npatches + 2*nphi
+      enddo
+      
+
+      return
+      end
+!
+!
+!
+!
 !
       subroutine get_miniwasp_ellip(abc_lens,abc_cone,abc_rhabdom, &
         abc_pig,xyz_lens,xyz_cone,xyz_rhabdom,xyz_pig,iref,npatches, &
@@ -484,7 +568,95 @@
       ptr3 => p3(1)
       ptr4 => p4(1)
 
-      norder = 5
+      npols = (norder+1)*(norder+2)/2
+      allocate(uvs(2,npols),wts(npols),umatr(npols,npols), &
+        vmatr(npols,npols))
+      call vioreanu_simplex_quad(norder,npols,uvs,umatr,vmatr,wts)
+      call getgeominfo(npatches,xtri_ellipsoid_polar_eval,ptr1,ptr2,ptr3, &
+        ptr4,npols,uvs,umatr,srcvals,srccoefs)
+
+
+      return
+      end
+!
+!
+!
+!
+!
+!
+
+      subroutine get_ellipsoid_geom_polar_nc(a,b,c,xyz0,rlam,ppw, &
+        norder,npatches,norders,ixyzs,iptype,npts,srcvals,srccoefs)
+      implicit real *8 (a-h,o-z)
+
+      real *8 v1(3),v2(3),v3(3),v4(3),xyz0(1:3)
+      real *8, allocatable, target :: triaskel(:,:,:)
+      real *8, pointer :: ptr1,ptr2,ptr3,ptr4
+      real *8, allocatable :: uvs(:,:),wts(:),umatr(:,:),vmatr(:,:)
+      real *8 srcvals(12,npts),srccoefs(9,npts)
+      integer iptype(npatches),ixyzs(npatches+1),norders(npatches)
+      real *8, target :: p1(10),p2(10),p3(10),p4(10)
+      integer ppw
+      external xtri_ellipsoid_polar_eval
+
+      npols = (norder+1)*(norder+2)/2
+      do i=1,npatches
+        norders(i) = norder
+        ixyzs(i) = (i-1)*npols + 1
+        iptype(i) = 1
+      enddo
+      ixyzs(npatches+1) = npts+1
+
+      allocate(triaskel(3,3,npatches))
+
+      done = 1.0d0
+      pi = atan(done)*4
+
+      nthet = ceiling(2*c*(ppw+0.0d0)/rlam/(norder+0.0d0))
+      hthet = (pi+0.0d0)/(nthet+0.0d0)
+
+      nthet0 = 1
+      istart = 1
+
+      do ithet = 1,nthet
+        n0 = 0
+
+        umin = (ithet-1)*hthet
+        umax = ithet*hthet
+        vmin = 0
+        vmax = 2*pi
+
+        tuse = umin
+        if(abs(umin-pi/2).ge.abs(umax-pi/2)) tuse = umax
+        if((umin-pi/2)*(umax-pi/2).le.0) tuse = pi/2
+
+        nthet0 = 1
+        nover = 0
+        alpha = a*sin(tuse)
+        beta = b*sin(tuse)
+        hh = (alpha-beta)**2/(alpha+beta)**2 
+
+        ellip_p = pi*(alpha + beta)* &
+           (1.0d0 + 3*hh/(10.0d0 + sqrt(4.0d0-3*hh)))
+        
+        nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        call xtri_rectmesh_ani(umin,umax,vmin,vmax,nthet0,nphi,nover, &
+          npatches,n0,triaskel(1,1,istart))
+        istart = istart + n0
+      enddo
+      print *, npatches,n0
+
+      p2(1) = a
+      p2(2) = b
+      p2(3) = c
+
+      p3(1:3) = xyz0(1:3)
+      
+      ptr1 => triaskel(1,1,1)
+      ptr2 => p2(1)
+      ptr3 => p3(1)
+      ptr4 => p4(1)
+
       npols = (norder+1)*(norder+2)/2
       allocate(uvs(2,npols),wts(npols),umatr(npols,npols), &
         vmatr(npols,npols))

@@ -1,6 +1,6 @@
 EXEC = int2-emwrap
 HOST = gcc
-#HOST = gcc-openmp
+HOST = gcc-openmp
 #HOST = intel
 #HOST = intel-ompenmp
 
@@ -62,7 +62,7 @@ FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
 
 .PHONY: all clean 
 
-OBJECTS =  test_miniwasp_ellip.o \
+OBJECTS =  test_miniwasp_ellip_helm.o \
   $ ../src/topol_sort.o \
   $ ../src/plot_tools.o \
   $ ../src/em_muller_trans_v2.o \

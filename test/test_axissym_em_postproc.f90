@@ -11,7 +11,19 @@
       real *8, allocatable :: srcvals_lens(:,:),srccoefs_lens(:,:)
       integer, allocatable :: iptype_lens(:),norders_lens(:), &
         ixyzs_lens(:)
-      integer ppw
+      real *8, allocatable :: srcvals_pigm(:,:),srccoefs_pigm(:,:)
+      integer, allocatable :: iptype_pigm(:),norders_pigm(:), & 
+        ixyzs_pigm(:)
+      
+      real *8, allocatable :: srcvals_extended(:,:)
+      real *8 xyzc_pigm(3)
+      integer ppw,ppw0
+
+      complex *16 contrast_matrix(4,4)
+      integer, allocatable :: sorted_vector(:)
+      logical, allocatable :: exposed_surfaces(:)
+      complex *16 pol(2),vf(3),omega,omega_use
+      real *8 direction(2)
 
       real *8, allocatable :: srcvals(:,:),srccoefs(:,:),targs(:,:)
       real *8, allocatable :: wts(:)
@@ -21,19 +33,33 @@
       real *8 dpars(3)
       real *8 xyz0(3)
       character *100 fname
-      integer ipars(2)
+      character *1000 folder_name
+      character *4 fstr
+      integer ipars(2),npatches_vect(4),npts_vect(4)
+      integer iinc_include(4)
       complex *16, allocatable :: rhs(:),sigma(:),pot(:),potex(:)
+      complex *16, allocatable :: Evals(:,:),Evalsex(:,:), &
+        Hvals(:,:),Hvalsex(:,:)
 
-      complex *16 zk,ima,zpars(3)
+      complex *16 zk,ima,zpars(5)
 
       integer, allocatable :: norders(:),ixyzs(:),iptype(:)
       integer, allocatable :: ipatch_id(:),inode_id(:),ipatch_id_in(:)
       real *8, allocatable :: uvs_targ(:,:),uvs_targ_in(:,:)
       real *8, allocatable :: xyz_in(:,:)
+      real *8, allocatable :: err_rhs_e_patches(:),err_soln_j_patches(:)
+      real *8, allocatable :: err_rhs_m_patches(:),err_soln_k_patches(:)
+      real *8, allocatable :: err_rhs_e_plot(:),err_soln_j_plot(:)
+      real *8, allocatable :: err_rhs_m_plot(:),err_soln_k_plot(:)
       complex *16, allocatable :: charges_in(:)
       real *8, allocatable :: rzbdry(:,:)
+      real *8, allocatable :: u_vect_s(:,:),v_vect_s(:,:)
+      complex *16, allocatable :: rhs_e(:,:),rhs_m(:,:)
+      complex *16, allocatable :: soln_j(:,:),soln_k(:,:)
+
+      integer, allocatable :: ixyzs_use(:)
       real *8 xyz_out(3),errs(1000)
-      complex *16 pottmp
+      complex *16 pottmp,zpig
       character (len=2) :: arg_comm
       data ima/(0.0d0,1.0d0)/
 
@@ -41,40 +67,112 @@
 
       done = 1.0d0
       pi = atan(done)*4
+
+      
+      
+
+      rpigm = 9094.9269d0
+      zpigm = 8844.9269d0
+
+      xyzc_pigm(1:3) = 0
+      xyzc_pigm(3) = zpigm
+
+      n_components = 4
+
+! 
+!   which interior point to use to generate exterior
+!   field, must be between 1-150
+!  
+      isrcin = 34
+
 ! default values
-      irlam = 1
-      ippw = 3
+      ppw = 5
       norder = 5
       ibc = 0
+      irlam = 4
+      iref = 3
 
-      call get_command_argument(1,arg_comm)
-      read(arg_comm,*) irlam
-
-      call get_command_argument(2,arg_comm)
-      read(arg_comm,*) ippw
-
-      call get_command_argument(3,arg_comm)
-      read(arg_comm,*) norder
-
-      call get_command_argument(4,arg_comm)
-      read(arg_comm,*) ibc 
 
       if(irlam.eq.1) rlam = 550.0d0
       if(irlam.eq.2) rlam = 450.0d0
       if(irlam.eq.3) rlam = 350.0d0
       if(irlam.eq.4) rlam = 550.0d0*4
+
+      omega = 2.0d0*pi/rlam
+
+      idis = 0
+      if(idis.eq.0) zpig = 1.34d0
+      if(idis.eq.1) zpig = 1.34d0 + 0.05d0*ima
+      if(idis.eq.1) zpig = 1.34d0 + 0.005d0*ima
+!      zpig = 1.13d0
+
+      eps = 1.0d-6
+      eps_gmres = 1.0d-7
+      numit = 400
+
+      direction(1) = 0
+      direction(2) = pi/2
+
+      ipolcase = 1
+      pol(1) = 3.0d0
+      pol(2) = 3.0d0
+      if(ipolcase.eq.1) then
+        pol(1) = 1.0d0
+        pol(2) = 0.0d0
+      else if(ipolcase.eq.2) then
+        pol(1) = 0.0d0
+        pol(2) = 1.0d0
+      endif
+
+      rsc = 1.0d0
+      iinc_include(1) = 1
+      iinc_include(2) = 0
+      iinc_include(3) = 0
+      iinc_include(4) = 1
+
+      n_components = iinc_include(1) + iinc_include(2) + &
+        iinc_include(3) + iinc_include(4)
+
+
+
+
       
-      zk = 2.0d0*pi/rlam
+      contrast_matrix(1,1)=zpig**2
+      contrast_matrix(2,1)=1.0d0  
+      contrast_matrix(3,1)=1.452d0**2  
+!      contrast_matrix(3,1)=1.1d0**2  
+      contrast_matrix(4,1)=1.0d0
 
-      if(ippw.eq.1) ppw = 3
-      if(ippw.eq.2) ppw = 5
-      if(ippw.eq.3) ppw = 10
-      if(ippw.eq.4) ppw = 20
+      contrast_matrix(1,2)=zpig**2
+      contrast_matrix(2,2)=1.0d0  
+      contrast_matrix(3,2)=1.348d0**2  
+!      contrast_matrix(3,2)=1.09d0**2  
+      contrast_matrix(4,2)=1.0d0
 
-      call get_axissym_miniwasp_geom_mem(rlam,ppw,norder, &
+      contrast_matrix(1,3)=zpig**2
+      contrast_matrix(2,3)=1.0d0  
+      contrast_matrix(3,3)=1.363d0**2  
+!      contrast_matrix(3,3)=1.11d0**2  
+      contrast_matrix(4,3)=1.0d0
+
+      contrast_matrix(1,4) = 1.0d0
+      contrast_matrix(2,4) = 1.0d0
+      contrast_matrix(3,4) = zpig**2 
+      contrast_matrix(4,4) = 1.0d0
+
+      rlam0 = rlam*1.452d0
+
+
+      call get_axissym_miniwasp_geom_mem(rlam0,ppw,iref,norder, &
         npatches_rhab, &
         npts_rhab, npatches_cone, npts_cone, &
         npatches_lens, npts_lens)
+      
+      ppw0 = ppw*iref
+      call get_polar_uvmem_nc(rpigm,rpigm,rpigm,rlam0,ppw0,norder, &
+        npatches_pigm)
+      npts_pigm = npatches_pigm*(norder+1)*(norder+2)/2
+
 
       allocate(srcvals_rhab(12,npts_rhab),srccoefs_rhab(9,npts_rhab))
       allocate(iptype_rhab(npatches_rhab),ixyzs_rhab(npatches_rhab+1))
@@ -88,9 +186,14 @@
       allocate(iptype_lens(npatches_lens),ixyzs_lens(npatches_lens+1))
       allocate(norders_lens(npatches_lens))
 
+      allocate(srcvals_pigm(12,npts_pigm),srccoefs_pigm(9,npts_pigm))
+      allocate(iptype_pigm(npatches_pigm),ixyzs_pigm(npatches_pigm+1))
+      allocate(norders_pigm(npatches_pigm))
+      
       ifplot = 0
 
-      call get_axissym_miniwasp_geom(rlam,ppw,norder,npatches_rhab, &
+      call get_axissym_miniwasp_geom(rlam0,ppw,iref,norder, &
+        npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
         norders_cone, ixyzys_cone, iptype_cone, npts_cone, &
@@ -98,7 +201,23 @@
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)
 
-      npatches = npatches_rhab + npatches_cone + npatches_lens
+      call get_ellipsoid_geom_polar_nc(rpigm,rpigm,rpigm,xyzc_pigm, &
+        rlam0,ppw0,norder,npatches_pigm,norders_pigm,ixyzs_pigm, &
+        iptype_pigm,npts_pigm,srcvals_pigm,srccoefs_pigm)
+
+      if(ifplot.eq.1) then
+        call surf_vtk_plot(npatches_pigm,norders_pigm,ixyzs_pigm, &
+         iptype_pigm,npts_pigm,srccoefs_pigm, srcvals_pigm, &
+         'pigm_axissym.vtk','a')
+      endif
+
+      npatches = 0
+      if(iinc_include(1).eq.1) npatches = npatches + npatches_rhab
+      if(iinc_include(2).eq.1) npatches = npatches + npatches_cone
+      if(iinc_include(3).eq.1) npatches = npatches + npatches_lens
+      if(iinc_include(4).eq.1) npatches = npatches + npatches_pigm
+
+
 !     
 !      npatches = npatches_rhab
       npols = (norder+1)*(norder+2)/2
@@ -107,29 +226,42 @@
       allocate(iptype(npatches),ixyzs(npatches+1),norders(npatches))
 
 !
-!   combine all three components of geometry
+!   combine all four components of geometry
 !
 !
       istart = 0
-      do i=1,npts_rhab
-        srcvals(1:12,istart+i) = srcvals_rhab(1:12,i)
-        srccoefs(1:9,istart+i) = srccoefs_rhab(1:9,i)
-      enddo
-!      goto 1111
 
-      istart = istart + npts_rhab
-      do i=1,npts_cone
-        srcvals(1:12,istart+i) = srcvals_cone(1:12,i)
-        srccoefs(1:9,istart+i) = srccoefs_cone(1:9,i)
-      enddo
+      if(iinc_include(1).eq.1) then
+        do i=1,npts_rhab
+          srcvals(1:12,istart+i) = srcvals_rhab(1:12,i)
+          srccoefs(1:9,istart+i) = srccoefs_rhab(1:9,i)
+        enddo
+        istart = istart + npts_rhab
+      endif
 
-      istart = istart + npts_cone
-      do i=1,npts_lens
-        srcvals(1:12,istart+i) = srcvals_lens(1:12,i)
-        srccoefs(1:9,istart+i) = srccoefs_lens(1:9,i)
-      enddo
+      if(iinc_include(2).eq.1) then
+        do i=1,npts_cone
+          srcvals(1:12,istart+i) = srcvals_cone(1:12,i)
+          srccoefs(1:9,istart+i) = srccoefs_cone(1:9,i)
+        enddo
+        istart = istart + npts_cone
+      endif
+
+      if(iinc_include(3).eq.1) then
+        do i=1,npts_lens
+          srcvals(1:12,istart+i) = srcvals_lens(1:12,i)
+          srccoefs(1:9,istart+i) = srccoefs_lens(1:9,i)
+        enddo
+        istart = istart + npts_lens
+      endif
+
+      if(iinc_include(4).eq.1) then
+        do i=1,npts_pigm
+          srcvals(1:12,istart+i) = srcvals_pigm(1:12,i)
+          srccoefs(1:9,istart+i) = srccoefs_pigm(1:9,i)
+        enddo
+      endif
  
-! 1111 continue
 
       do i=1,npatches
         norders(i) = norder
@@ -141,10 +273,64 @@
 
       allocate(wts(npts))
       call get_qwts(npatches,norders,ixyzs,iptype,npts,srcvals,wts)
+      nt = 0
+      call get_bsize(12,npts,srcvals,3,nt,tmp,bsize)
+      rsc = 1.0d0/bsize
+
+      do i=1,npts
+        do j=1,9
+          srcvals(j,i) = srcvals(j,i)*rsc
+          srccoefs(j,i) = srccoefs(j,i)*rsc
+        enddo
+        wts(i) = wts(i)*rsc**2
+      enddo
+      omega_use = omega/rsc
+
+      allocate(sorted_vector(n_components+1), &
+        exposed_surfaces(n_components))
+      allocate(srcvals_extended(20,npts))
+
+      icomp = 1
+
+      if(iinc_include(1).eq.1) then
+        npatches_vect(icomp) = npatches_rhab
+        npts_vect(icomp) = npts_rhab
+        icomp = icomp + 1
+      endif
+
+      if(iinc_include(2).eq.1) then
+        npatches_vect(icomp) = npatches_cone
+        npts_vect(icomp) = npts_cone
+        icomp = icomp + 1
+      endif
+
+      if(iinc_include(3).eq.1) then
+        npatches_vect(icomp) = npatches_lens
+        npts_vect(icomp) = npts_lens
+        icomp = icomp + 1
+      endif
+
+      if(iinc_include(4).eq.1) then
+        npatches_vect(icomp) = npatches_pigm
+        npts_vect(icomp) = npts_pigm
+        icomp = icomp + 1
+      endif
+
+
+
+      print *, "eps=",eps
+      print *, "starting topological sort"
+
+      print *, "n_components=",n_components
+
+
 
       print *, "npatches_use=",npatches
 
-      allocate(sigma(npts),rhs(npts))
+      allocate(sigma(4*npts),rhs(4*npts))
+      vf(1) = 1.0d-3
+      vf(2) = 2.0d-3
+      vf(3) = 3.0d-3
 !
 !  get boundary definition at various z slices
 !
@@ -168,78 +354,25 @@
       allocate(xyz_in(3,nin),charges_in(nin))
       allocate(dpot(nin),ipatch_id_in(nin),uvs_targ_in(2,nin))
       allocate(dsigma(npts))
-      do i=1,npts
-        dsigma(i) = 1.0d0
-      enddo
-      ii = 0
-      do iz=1,nz
-        z0 = rzbdry(2,iz)
-        r0 = rzbdry(1,iz)
-        do ir=1,nrin
-          rr = (ir-0.5d0)/(nrin+0.0d0)*0.5d0*r0
-          do itt = 1,ntin
-            thet = (itt-1.0d0)/(ntin+0.0d0)*2*pi
-            ii = ii +1
-            xyz_in(1,ii) = rr*cos(thet)
-            xyz_in(2,ii) = rr*sin(thet)
-            xyz_in(3,ii) = z0
-            charges_in(ii) = (hkrand(0)-0.5d0) + ima*(hkrand(0)-0.5d0)
-            ipatch_id_in(ii) = -1
-            uvs_targ_in(1:2,ii) = 0
-          enddo
-        enddo
-      enddo
+      print *, "isrcin=",isrcin
+      print *, "xyz_in=",xyz_in(1:3,isrcin)
+      print *, "n_components=",n_components
+      print *, "omega_use=",omega_use
+      print *, "omega=",omega
+      print *, "rsc=",rsc
 
-      dpars(1) = 0
-      dpars(2) = 1.0d0
-      eps = 1.0d-8
-      ndtarg = 3
-      call lpcomp_lap_comb_dir(npatches,norders,ixyzs,iptype, &
-       npts,srccoefs,srcvals,ndtarg,nin,xyz_in,ipatch_id_in,uvs_targ_in, &
-       eps,dpars,dsigma,dpot)
+      print *, "vf =",vf
+      print *, "direction=",direction
+      print *, "pol=",pol
+
+      rhs = 0
+      print *, "npts_vect=",npts_vect(1:n_components)
       
 
 
-      thet0 = pi/20.0d0
-      phi0 = pi/4.5d0
-      if(ibc.eq.0) then
-        ra = 0
-        do i=1,npts
-          rhs(i) = 0.0d0
-          do ii=1,nin
-            call h3d_slp(xyz_in(1,ii),3,srcvals(1,i),0,dpars,1,zk,0, &
-               ipars,pottmp)
-            rhs(i) = rhs(i) + pottmp*charges_in(ii)
-          enddo
-          ra = ra + abs(rhs(i))**2*wts(i)
-        enddo
-        ra = sqrt(ra)
-        call prin2('l2 norm of boundary data=*',ra,1)
-      else
-        do i=1,npts
-          dprod = srcvals(1,i)*sin(thet0)*cos(phi0) + &
-              srcvals(2,i)*sin(thet0)*sin(phi0) + &
-              srcvals(3,i)*cos(thet0)
-           rhs(i) = -exp(ima*zk*dprod)
-        enddo
-      endif
-
-      eps = 1.0d-8
-      eps_gmres = 1.0d-9
-      numit = 400
-      ifinout = 1
-      zpars(1) = zk
-      zpars(2) = -ima*zk
-      zpars(3) = 1.0d0
-
-!      goto 1121
-      call helm_comb_dir_solver(npatches,norders,ixyzs,iptype,npts, &
-        srccoefs,srcvals,eps,zpars,numit,ifinout,rhs,eps_gmres,niter, &
-        errs,rres,sigma)
- 1121 continue 
-
-
- 
+      zpars(1) = omega_use
+      call prin2('contrast_matrix=*',contrast_matrix,32)
+      sigma = 0
 
       nt = 10
       nr = 10
@@ -247,119 +380,220 @@
       ntarg = nt*nz*nr
       allocate(targs(3,ntarg))
       allocate(pot(ntarg),potex(ntarg))
+      allocate(Evals(3,ntarg),Evalsex(3,ntarg))
+      allocate(Hvals(3,ntarg),Hvalsex(3,ntarg))
 
-      ndtarg = 3
-      ii = 0
-      do iz=1,nz
-        z0 = rzbdry(2,iz)
-        r0 = rzbdry(1,iz)
-        do ir=1,nr
-          rexp = -2 + (ir-1.0d0)/(nr-1.0d0)*1
-          r =(1.0d0+10**(rexp))
-          rr = r0*r
-          do itt = 1,nt
-            thet = (itt-1.0d0)/(ntin+0.0d0)*2*pi
-            ii = ii +1
-            targs(1,ii) = rr*cos(thet)
-            targs(2,ii) = rr*sin(thet)
-            targs(3,ii) = z0
-            pot(ii) = 0
-            potex(ii) = 0
-          enddo
+      write(folder_name,'(a,i1,a,i1,a,i1,a,i1,a)') &
+         'axissym-em-data/irlam',irlam,'_iref',iref,'_norder',norder,&
+         '_ibc',ibc,'_iinc1001/'
+      print *, "folder_name=",trim(folder_name)
+
+      open(unit=33,file=trim(folder_name)//'soln.dat')
+      do i=1,4*npts
+        read(33,*) tmp1,tmp2
+        sigma(i) = tmp1 + ima*tmp2
+      enddo
+      close(33)
+
+      open(unit=33,file=trim(folder_name)//'rhs.dat')
+      do i=1,4*npts
+        read(33,*) tmp1,tmp2
+        rhs(i) = tmp1 + ima*tmp2
+      enddo
+      close(33)
+
+      open(unit=33,file=trim(folder_name)//'targinfo.dat')
+      do i=1,ntarg
+        read(33,*) targs(1,i),targs(2,i),targs(3,i)
+      enddo
+      close(33)
+
+      open(unit=33,file=trim(folder_name)//'Evals.dat')
+      do i=1,ntarg
+        read(33,'(6(2x,e11.5))') tmp1,tmp2,tmp3,tmp4,tmp5,tmp6
+        Evals(1,i) = tmp1 + ima*tmp2
+        Evals(2,i) = tmp3 + ima*tmp4
+        Evals(3,i) = tmp5 + ima*tmp6
+        
+      enddo
+      close(33)
+      
+      open(unit=33,file=trim(folder_name)//'Hvals.dat')
+      do i=1,ntarg
+        read(33,'(6(2x,e11.5))') tmp1,tmp2,tmp3,tmp4,tmp5,tmp6
+        Hvals(1,i) = tmp1 + ima*tmp2
+        Hvals(2,i) = tmp3 + ima*tmp4
+        Hvals(3,i) = tmp5 + ima*tmp6
+        
+      enddo
+      close(33)
+ 
+      open(unit=33,file=trim(folder_name)//'Evalsex.dat')
+      do i=1,ntarg
+        read(33,'(6(2x,e11.5))') tmp1,tmp2,tmp3,tmp4,tmp5,tmp6
+        Evalsex(1,i) = tmp1 + ima*tmp2
+        Evalsex(2,i) = tmp3 + ima*tmp4
+        Evalsex(3,i) = tmp5 + ima*tmp6
+      enddo
+      close(33)
+      
+      open(unit=33,file=trim(folder_name)//'Hvalsex.dat')
+      do i=1,ntarg
+        read(33,'(6(2x,e11.5))') tmp1,tmp2,tmp3,tmp4,tmp5,tmp6
+        Hvalsex(1,i) = tmp1 + ima*tmp2
+        Hvalsex(2,i) = tmp3 + ima*tmp4
+        Hvalsex(3,i) = tmp5 + ima*tmp6
+      enddo
+      close(33)
+
+      call prin2('sigma=*',sigma,24)
+      call prin2('rhs=*',rhs,24)
+
+      allocate(rhs_e(3,npts),rhs_m(3,npts),soln_j(3,npts), &
+        soln_k(3,npts))
+      
+      allocate(u_vect_s(3,npts),v_vect_s(3,npts))
+      
+      call orthonormalize_all(srcvals(4:6,:),srcvals(10:12,:), &
+        u_vect_s,v_vect_s,npts)
+      
+      do i=1,npts
+        rhs_e(1:3,i) = rhs(i)*u_vect_s(1:3,i) + &
+          rhs(i+npts)*v_vect_s(1:3,i)
+        rhs_m(1:3,i) = rhs(2*npts+i)*u_vect_s(1:3,i) + &
+          rhs(i+3*npts)*v_vect_s(1:3,i)
+
+        soln_j(1:3,i) = sigma(i)*u_vect_s(1:3,i) + &
+          sigma(i+npts)*v_vect_s(1:3,i)
+        soln_k(1:3,i) = sigma(2*npts+i)*u_vect_s(1:3,i) + &
+          sigma(i+3*npts)*v_vect_s(1:3,i)
+      enddo
+      
+      allocate(err_rhs_e_patches(npatches),err_soln_j_patches(npatches))
+      allocate(err_rhs_m_patches(npatches),err_soln_k_patches(npatches))
+
+
+      allocate(err_rhs_e_plot(npts),err_soln_j_plot(npts))
+      allocate(err_rhs_m_plot(npts),err_soln_k_plot(npts))
+
+
+      call surf_fun_error(6,npatches,norders,ixyzs,iptype,npts,rhs_e, &
+         wts,err_rhs_e_patches,errm)
+      call surf_fun_error(6,npatches,norders,ixyzs,iptype,npts,rhs_m, &
+         wts,err_rhs_m_patches,errm)
+
+      call surf_fun_error(6,npatches,norders,ixyzs,iptype,npts,soln_j, &
+         wts,err_soln_j_patches,errm)
+      call surf_fun_error(6,npatches,norders,ixyzs,iptype,npts,soln_k, &
+         wts,err_soln_k_patches,errm)
+
+
+      do ipatch=1,npatches
+        do i = ixyzs(ipatch),ixyzs(ipatch+1)-1
+           err_rhs_e_plot(i) = log(err_rhs_e_patches(ipatch))/log(10.0d0)
+           err_rhs_m_plot(i) = log(err_rhs_m_patches(ipatch))/log(10.0d0)
+           err_soln_j_plot(i) = log(err_soln_j_patches(ipatch))/log(10.0d0)
+           err_soln_k_plot(i) = log(err_soln_k_patches(ipatch))/log(10.0d0)
         enddo
       enddo
-      
 
-      allocate(ipatch_id(ntarg),uvs_targ(2,ntarg))
-      do i=1,ntarg
-        ipatch_id(i) = -1
-        uvs_targ(1,i) = 0
-        uvs_targ(2,i) = 0
-      enddo
-      deallocate(dpot)
-      allocate(dpot(ntarg))
+      icomp = 1
+      istart = 1
+      ipstart = 1
 
-      dpars(1) = 0
-      dpars(2) = 1.0d0
-      eps = 1.0d-8
-      ndtarg = 3
-      call lpcomp_lap_comb_dir(npatches,norders,ixyzs,iptype, &
-       npts,srccoefs,srcvals,ndtarg,ntarg,targs,ipatch_id,uvs_targ, &
-       eps,dpars,dsigma,dpot)
-      
-      eps = 1.0d-8
-
-
-      call lpcomp_helm_comb_dir(npatches,norders,ixyzs,iptype, &
-       npts,srccoefs,srcvals,ndtarg,ntarg,targs,ipatch_id,uvs_targ, &
-       eps,zpars,sigma,pot)
-
-
-      
-      ra = 0
-      do i=1,npts
-        ra  = ra + abs(sigma(i))**2*wts(i)
-      enddo
-      ra = sqrt(ra)
-      call prin2('l2 norm of density=*',ra,1)
-
-      open(unit=33,file='axissym_pottar.dat')
-      if(ibc.eq.0) then
-        erra = 0.0d0
-!        ra = 0.0d0
-        do i=1,ntarg
-          potex(i) = 0
-          do ii=1,nin
-            call h3d_slp(xyz_in(1,ii),3,targs(1,i),0,dpars,1,zk,0, &
-              ipars,pottmp)
-            potex(i) = potex(i) + pottmp*charges_in(ii)
+      do iii = 1,4
+        if(iii.eq.1) fstr = 'rhab'
+        if(iii.eq.2) fstr = 'cone'
+        if(iii.eq.3) fstr = 'lens'
+        if(iii.eq.4) fstr = 'pigm'
+        if(iinc_include(iii).eq.1) then
+          npatches_use = npatches_vect(icomp)
+          npts_use = npts_vect(icomp)
+          allocate(ixyzs_use(npatches_use))
+          iend = istart + npts_use - 1
+          ipend = ipstart + npatches_use - 1
+ 
+          npols = (norder+1)*(norder+2)/2
+          do i=1,npatches_use
+            ixyzs_use(i) = (i-1)*npols + 1
           enddo
-          erra = erra + abs(pot(i)-potex(i))**2
-          write(33,'(5(2x,e11.5))') real(pot(i)),real(potex(i)), &
-            imag(pot(i)),imag(potex(i)), abs(pot(i)-potex(i))
-!          ra = ra + abs(potex(i))**2
-         enddo
-         print *, "ra=",ra
-         erra = sqrt(erra/ra)
-         print *, "error in potential at targets=",npatches,erra
-       endif
+          ixyzs_use(npatches_use+1) = npts_use+1
 
-       if(ibc.eq.1) then
-         write(fname,'(a,i1,a,i1,a)') 'axissym_pot_norder', &
-            norder,'_ippw',ippw,'.dat'
-         open(unit=33,file=trim(fname))
-         do i=1,ntarg
-           write(33,*) real(pot(i)),imag(pot(i))
-         enddo
-         close(33)
-         write(fname,'(a,i1,a,i1,a)') 'axissym_sigma_norder', &
-            norder,'_ippw',ippw,'.dat'
-         open(unit=33,file=trim(fname))
-         do i=1,npts
-           write(33,*) real(sigma(i)),imag(sigma(i))
-         enddo
-         close(33)
-       endif
+          fname = trim(folder_name)//'rhs_'//fstr//'_e.vtk'
+          call surf_vtk_plot_zvec(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            rhs_e(:,istart:iend),fname,'a')
 
-       allocate(errp(npatches))
-       call surf_fun_error(2,npatches,norders,ixyzs,iptype,npts,sigma, &
-         wts,errp,errm)
-       print *, "estimated error in density=",errm
-       write(fname,'(a,i1,a,i1,a)') 'axissym_sigma_norder', &
-         norder,'_ippw',ippw,'.vtk'
+          fname = trim(folder_name)//'rhs_'//fstr//'_m.vtk'
+          call surf_vtk_plot_zvec(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            rhs_m(:,istart:iend),fname,'a')
 
-       allocate(errp_plot(npts))
-       do ipatch=1,npatches
-         do i = ixyzs(ipatch),ixyzs(ipatch+1)-1
-           errp_plot(i) = log(errp(ipatch))/log(10.0d0)
-         enddo
-       enddo
+ 
+          fname = trim(folder_name)//'soln_'//fstr//'_j.vtk'
+          call surf_vtk_plot_zvec(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            soln_j(:,istart:iend),fname,'a')
 
-       call surf_vtk_plot_scalar(npatches,norders,ixyzs,iptype, &
-         npts,srccoefs,srcvals,errp_plot,trim(fname),'a')
-       
+
+          fname = trim(folder_name)//'soln_'//fstr//'_k.vtk'
+          call surf_vtk_plot_zvec(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            soln_k(:,istart:iend),fname,'a')
         
+
+          fname = trim(folder_name)//'rhs_err_'//fstr//'_e.vtk'
+          call surf_vtk_plot_scalar(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            err_rhs_e_plot(istart:iend),fname,'a')
+
+          fname = trim(folder_name)//'rhs_err_'//fstr//'_m.vtk'
+          call surf_vtk_plot_scalar(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            err_rhs_m_plot(istart:iend),fname,'a')
+
+ 
+          fname = trim(folder_name)//'soln_err_'//fstr//'_j.vtk'
+          call surf_vtk_plot_scalar(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            err_soln_j_plot(istart:iend),fname,'a')
+
+
+          fname = trim(folder_name)//'soln_err_'//fstr//'_k.vtk'
+          call surf_vtk_plot_scalar(npatches_use, &
+            norders(ipstart:ipend),ixyzs_use,iptype(ipstart:ipend), &
+            npts_use, &
+            srccoefs(:,istart:iend),srcvals(:,istart:iend), &
+            err_soln_k_plot(istart:iend),fname,'a')
+        
+
+          istart = istart + npts_use
+          ipstart = ipstart + npatches_use
+          icomp = icomp + 1
+          deallocate(ixyzs_use)
+        endif
+      enddo
        
+
+
+
+
+     
+     
 
 
 
@@ -372,7 +606,7 @@
 !
       
       
-      subroutine get_axissym_miniwasp_geom_mem(rlam,ppw,norder, &
+      subroutine get_axissym_miniwasp_geom_mem(rlam,ppw,iref,norder, &
         npatches_rhab, &
         npts_rhab, npatches_cone, npts_cone, &
         npatches_lens, npts_lens)
@@ -433,12 +667,12 @@
       nv_rhab = 4
       nv_cone = 6
       nv_lens = 5
-
       call get_verts_mwaxissym(verts_rhab,nv_rhab,verts_cone,nv_cone, &
         verts_lens, nv_lens)
       call prin2('verts_rhab=*',verts_rhab,2*nv_rhab)
       call prin2('verts_rhab=*',verts_cone,2*nv_cone)
       call prin2('verts_rhab=*',verts_lens,2*nv_lens)
+
 
 !
 !  Compute widths for smoothing
@@ -564,13 +798,13 @@
 !
 
       call get_axissym_uvmem(nch_rhab,k,rzcoeffs_rhab,rzvals_rhab, &
-         rlam,ppw,norder,npatches_rhab)
+         rlam,ppw,iref,norder,npatches_rhab)
 
       call get_axissym_uvmem(nch_cone,k,rzcoeffs_cone,rzvals_cone, &
-         rlam,ppw,norder,npatches_cone)
+         rlam,ppw,iref,norder,npatches_cone)
 
       call get_axissym_uvmem(nch_lens,k,rzcoeffs_lens,rzvals_lens, &
-         rlam,ppw,norder,npatches_lens)
+         rlam,ppw,iref,norder,npatches_lens)
       
 
       print *, npatches_rhab,npatches_cone,npatches_lens
@@ -589,7 +823,7 @@
 
 
       
-      subroutine get_axissym_miniwasp_geom(rlam,ppw,norder, &
+      subroutine get_axissym_miniwasp_geom(rlam,ppw,iref,norder, &
         npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
@@ -669,12 +903,13 @@
       nv_rhab = 4
       nv_cone = 6
       nv_lens = 5
+
+
       call get_verts_mwaxissym(verts_rhab,nv_rhab,verts_cone,nv_cone, &
         verts_lens, nv_lens)
       call prin2('verts_rhab=*',verts_rhab,2*nv_rhab)
       call prin2('verts_rhab=*',verts_cone,2*nv_cone)
       call prin2('verts_rhab=*',verts_lens,2*nv_lens)
-
 
 !
 !  Compute widths for smoothing
@@ -816,15 +1051,15 @@
 
       
       call get_axissym_geom(nch_rhab,k,rzcoeffs_rhab,rzvals_rhab, &
-         rlam,ppw,norder,npatches_rhab,norders_rhab,ixyzs_rhab, &
+         rlam,ppw,iref,norder,npatches_rhab,norders_rhab,ixyzs_rhab, &
          iptype_rhab,npts_rhab,srcvals_rhab,srccoefs_rhab)
 
       call get_axissym_geom(nch_cone,k,rzcoeffs_cone,rzvals_cone, &
-         rlam,ppw,norder,npatches_cone,norders_cone,ixyzs_cone, &
+         rlam,ppw,iref,norder,npatches_cone,norders_cone,ixyzs_cone, &
          iptype_cone,npts_cone,srcvals_cone,srccoefs_cone)
 
       call get_axissym_geom(nch_lens,k,rzcoeffs_lens,rzvals_lens, &
-         rlam,ppw,norder,npatches_lens,norders_lens,ixyzs_lens, &
+         rlam,ppw,iref,norder,npatches_lens,norders_lens,ixyzs_lens, &
          iptype_lens,npts_lens,srcvals_lens,srccoefs_lens)
       print *, npatches_rhab,npatches_cone,npatches_lens
       print *, npts_rhab,npts_cone,npts_lens
@@ -853,7 +1088,7 @@
 
 
 
-      subroutine get_axissym_uvmem(nch,k,rzcoefs,rzvals,rlam,ppw, &
+      subroutine get_axissym_uvmem(nch,k,rzcoefs,rzvals,rlam,ppw,iref, &
          norder,npatches)
 !
 !  This subroutine estimates the number of patches required to
@@ -927,8 +1162,8 @@
         if(rs(1).ge.rmax) rmax = rs(1)
         if(rs(2).ge.rmax) rmax = rs(2)
 
-        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))
-        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
+        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
         npatches = npatches + 2*ns*nt
       enddo
 
@@ -940,7 +1175,7 @@
 
 
 
-      subroutine get_axissym_geom(nch,k,rzcoefs,rzvals,rlam,ppw, &
+      subroutine get_axissym_geom(nch,k,rzcoefs,rzvals,rlam,ppw,iref, &
          norder,npatches,norders,ixyzs,iptype,npts,srcvals,srccoefs)
 !
 !  This subroutine estimates the number of patches required to
@@ -1051,8 +1286,8 @@
         if(rs(1).ge.rmax) rmax = rs(1)
         if(rs(2).ge.rmax) rmax = rs(2)
 
-        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))
-        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
+        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
         call xtri_rectmesh_ani(umin,umax,vmin,vmax,ns,nt,nover, &
           npatches,npatches0,triaskel(1,1,istart))
         ichuse(istart:(istart+2*ns*nt-1)) = ich 
@@ -1188,10 +1423,231 @@
 
       return
       end subroutine xtri_axissym_chunk
+
+
+
+
+
+
+
+
+
+
 !
 !
 !
 !
+!
+      subroutine get_polar_uvmem_nc(a,b,c,rlam,ppw,norder,npatches)
+      implicit real *8 (a-h,o-z)
+      integer ppw,norder,npatches
+
+      done = 1.0d0
+      pi = atan(done)*4
+
+      nthet = ceiling(2*c*(ppw+0.0d0)/rlam/(norder+0.0d0))
+      hthet = (pi+0.0d0)/(nthet+0.0d0)
+
+      npatches = 0
+      do ithet=1,nthet
+        t0 = (ithet-1)*hthet
+        t1 = (ithet)*hthet
+
+        tuse = t0
+        if(abs(t0-pi/2).ge.abs(t1-pi/2)) tuse = t1
+        if((t0-pi/2)*(t1-pi/2).le.0) tuse = pi/2
+
+
+        alpha = a*sin(tuse)
+        beta = b*sin(tuse)
+        hh = (alpha-beta)**2/(alpha+beta)**2 
+
+        ellip_p = pi*(alpha + beta)* &
+           (1.0d0 + 3*hh/(10.0d0 + sqrt(4.0d0-3*hh)))
+        
+        nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        npatches = npatches + 2*nphi
+      enddo
+      
+
+      return
+      end
+!
+!
+!
+!
+
+      subroutine get_ellipsoid_geom_polar_nc(a,b,c,xyz0,rlam,ppw, &
+        norder,npatches,norders,ixyzs,iptype,npts,srcvals,srccoefs)
+      implicit real *8 (a-h,o-z)
+
+      real *8 v1(3),v2(3),v3(3),v4(3),xyz0(1:3)
+      real *8, allocatable, target :: triaskel(:,:,:)
+      real *8, pointer :: ptr1,ptr2,ptr3,ptr4
+      real *8, allocatable :: uvs(:,:),wts(:),umatr(:,:),vmatr(:,:)
+      real *8 srcvals(12,npts),srccoefs(9,npts)
+      integer iptype(npatches),ixyzs(npatches+1),norders(npatches)
+      real *8, target :: p1(10),p2(10),p3(10),p4(10)
+      integer ppw
+      external xtri_ellipsoid_polar_eval
+
+      npols = (norder+1)*(norder+2)/2
+      do i=1,npatches
+        norders(i) = norder
+        ixyzs(i) = (i-1)*npols + 1
+        iptype(i) = 1
+      enddo
+      ixyzs(npatches+1) = npts+1
+
+      allocate(triaskel(3,3,npatches))
+
+      done = 1.0d0
+      pi = atan(done)*4
+
+      nthet = ceiling(2*c*(ppw+0.0d0)/rlam/(norder+0.0d0))
+      hthet = (pi+0.0d0)/(nthet+0.0d0)
+
+      nthet0 = 1
+      istart = 1
+
+      do ithet = 1,nthet
+        n0 = 0
+
+        umin = (ithet-1)*hthet
+        umax = ithet*hthet
+        vmin = 0
+        vmax = 2*pi
+
+        tuse = umin
+        if(abs(umin-pi/2).ge.abs(umax-pi/2)) tuse = umax
+        if((umin-pi/2)*(umax-pi/2).le.0) tuse = pi/2
+
+        nthet0 = 1
+        nover = 0
+        alpha = a*sin(tuse)
+        beta = b*sin(tuse)
+        hh = (alpha-beta)**2/(alpha+beta)**2 
+
+        ellip_p = pi*(alpha + beta)* &
+           (1.0d0 + 3*hh/(10.0d0 + sqrt(4.0d0-3*hh)))
+        
+        nphi = ceiling(ellip_p*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        call xtri_rectmesh_ani(umin,umax,vmin,vmax,nthet0,nphi,nover, &
+          npatches,n0,triaskel(1,1,istart))
+        istart = istart + n0
+      enddo
+      print *, npatches,n0
+
+      p2(1) = a
+      p2(2) = b
+      p2(3) = c
+
+      p3(1:3) = xyz0(1:3)
+      
+      ptr1 => triaskel(1,1,1)
+      ptr2 => p2(1)
+      ptr3 => p3(1)
+      ptr4 => p4(1)
+
+      npols = (norder+1)*(norder+2)/2
+      allocate(uvs(2,npols),wts(npols),umatr(npols,npols), &
+        vmatr(npols,npols))
+      call vioreanu_simplex_quad(norder,npols,uvs,umatr,vmatr,wts)
+      call getgeominfo(npatches,xtri_ellipsoid_polar_eval,ptr1,ptr2,ptr3, &
+        ptr4,npols,uvs,umatr,srcvals,srccoefs)
+
+
+      return
+      end
+!
+!
+!
+!
+!
+!
+
+
+      subroutine xtri_ellipsoid_polar_eval(itri, u, v, xyz, dxyzduv, & 
+          triainfo,p2, p3, p4)
+      implicit real *8 (a-h,o-z)
+      real *8 :: xyz(3), dxyzduv(3,2), triainfo(3,3,*),p2(3),p3(3)
+
+
+      !
+      ! project the triangle itri in triainfo onto the sphere
+      !
+      !    Input:
+      ! itri - triangle number to map
+      ! u,v - local uv coordinates on triangle itri
+      ! triainfo - flat skeleton triangle info
+      ! p2,p3,p4 - dummy parameters
+      !
+      !    Output:
+      ! xyz - point on the sphere
+      ! dxyzduv - first derivative information
+      !
+      !
+
+      x0=triainfo(1,1,itri)
+      y0=triainfo(2,1,itri)
+      z0=triainfo(3,1,itri)
+
+      x1=triainfo(1,2,itri)
+      y1=triainfo(2,2,itri)
+      z1=triainfo(3,2,itri)
+
+      x2=triainfo(1,3,itri)
+      y2=triainfo(2,3,itri)
+      z2=triainfo(3,3,itri)
+
+      !
+      ! ... process the geometry, return the point location on the sphere
+      ! and the derivatives with respect to u and v
+      !
+      x=x0+u*(x1-x0)+v*(x2-x0)
+      y=y0+u*(y1-y0)+v*(y2-y0)
+      z=z0+u*(z1-z0)+v*(z2-z0)
+
+      dxdu = x1-x0
+      dydu = y1-y0
+      dzdu = z1-z0
+    
+      dxdv = x2-x0
+      dydv = y2-y0
+      dzdv = z2-z0
+
+      !
+      ! second derivatives are zero...
+      !
+
+      !
+      ! project onto the sphere
+      !
+      xyz(1)=p2(1)*sin(x)*cos(y) + p3(1)
+      xyz(2)=p2(2)*sin(x)*sin(y) + p3(2)
+      xyz(3)=p2(3)*cos(x) + p3(3)
+
+
+      ! du
+      dxyzduv(1,1) = p2(1)*(cos(x)*cos(y)*dxdu - sin(x)*sin(y)*dydu)
+      dxyzduv(2,1) = p2(2)*(cos(x)*sin(y)*dxdu + sin(x)*cos(y)*dydu)
+      dxyzduv(3,1) = p2(3)*(-sin(x)*dxdu)
+
+      ! dv
+      dxyzduv(1,2) = p2(1)*(cos(x)*cos(y)*dxdv - sin(x)*sin(y)*dydv)
+      dxyzduv(2,2) = p2(2)*(cos(x)*sin(y)*dxdv + sin(x)*cos(y)*dydv)
+      dxyzduv(3,2) = p2(3)*(-sin(x)*dxdv)
+
+      return
+      end subroutine xtri_ellipsoid_polar_eval
+
+
+
+
+
+
+
+
 !
       subroutine get_rzbdry(nz,nskip,rzbdry)
       implicit real *8 (a-h,o-z)

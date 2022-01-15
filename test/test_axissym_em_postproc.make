@@ -1,4 +1,4 @@
-EXEC = int2-emwrap
+EXEC = int2-axissym-em-postproc
 HOST = gcc
 HOST = gcc-openmp
 #HOST = intel
@@ -36,7 +36,6 @@ ifneq ($(OS),Windows_NT)
     endif
 endif
 
-
 ifeq ($(HOST),gcc)
     FC=gfortran 
     FFLAGS=-fPIC -O3 -funroll-loops -march=x86-64 -std=legacy 
@@ -62,11 +61,15 @@ FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
 
 .PHONY: all clean 
 
-OBJECTS =  test_ellipsoid.o \
+OBJECTS =  test_axissym_em_postproc.o \
   $ ../src/topol_sort.o \
   $ ../src/plot_tools.o \
   $ ../src/em_muller_trans_v2.o \
   $ ../src/surf_routs.o \
+  $ ../src/corners.o \
+  $ ../src/qerrfun.o \
+  $ ../src/chunks.o \
+  $ ../src/pplot.o \
 #
 # use only the file part of the filename, then manually specify
 # the build location
@@ -80,7 +83,7 @@ OBJECTS =  test_ellipsoid.o \
 
 all: $(OBJECTS)
 	$(FC) $(FFLAGS) -o $(EXEC) $(OBJECTS) $(FEND) 
-	./$(EXEC)  
+	./$(EXEC)
 
 clean:
 	rm -f $(OBJECTS)

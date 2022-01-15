@@ -84,7 +84,6 @@ OBJECTS =  test_axissym_solver.o \
 
 all: $(OBJECTS)
 	$(FC) $(FFLAGS) -o $(EXEC) $(OBJECTS) $(FEND) 
-	./$(EXEC)  
 
 clean:
 	rm -f $(OBJECTS)

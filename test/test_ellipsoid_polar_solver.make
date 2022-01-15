@@ -62,7 +62,7 @@ FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
 
 .PHONY: all clean 
 
-OBJECTS =  test_ellipsoid.o \
+OBJECTS =  test_ellipsoid_polar_solver.o \
   $ ../src/topol_sort.o \
   $ ../src/plot_tools.o \
   $ ../src/em_muller_trans_v2.o \

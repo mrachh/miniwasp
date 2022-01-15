@@ -1,5 +1,4 @@
       implicit real *8 (a-h,o-z)
-      
       real *8, allocatable :: srcvals_rhab(:,:),srccoefs_rhab(:,:)
       integer, allocatable :: iptype_rhab(:),norders_rhab(:), &
         ixyzs_rhab(:)
@@ -13,63 +12,11 @@
         ixyzs_lens(:)
       integer ppw
 
-      real *8, allocatable :: srcvals(:,:),srccoefs(:,:),targs(:,:)
-      real *8, allocatable :: wts(:)
-      real *8, allocatable :: dpot(:),dsigma(:)
-      real *8, allocatable :: errp(:),errp_plot(:)
-      real *8 errm
-      real *8 dpars(3)
-      real *8 xyz0(3)
-      character *100 fname
-      integer ipars(2)
-      complex *16, allocatable :: rhs(:),sigma(:),pot(:),potex(:)
 
-      complex *16 zk,ima,zpars(3)
-
-      integer, allocatable :: norders(:),ixyzs(:),iptype(:)
-      integer, allocatable :: ipatch_id(:),inode_id(:),ipatch_id_in(:)
-      real *8, allocatable :: uvs_targ(:,:),uvs_targ_in(:,:)
-      real *8, allocatable :: xyz_in(:,:)
-      complex *16, allocatable :: charges_in(:)
-      real *8, allocatable :: rzbdry(:,:)
-      real *8 xyz_out(3),errs(1000)
-      complex *16 pottmp
-      character (len=2) :: arg_comm
-      data ima/(0.0d0,1.0d0)/
-
-      call prini(6,13)
-
-      done = 1.0d0
-      pi = atan(done)*4
-! default values
-      irlam = 1
-      ippw = 3
+      rlam = 550.0d0/1.4d0
+      ppw = 5
       norder = 5
-      ibc = 0
 
-      call get_command_argument(1,arg_comm)
-      read(arg_comm,*) irlam
-
-      call get_command_argument(2,arg_comm)
-      read(arg_comm,*) ippw
-
-      call get_command_argument(3,arg_comm)
-      read(arg_comm,*) norder
-
-      call get_command_argument(4,arg_comm)
-      read(arg_comm,*) ibc 
-
-      if(irlam.eq.1) rlam = 550.0d0
-      if(irlam.eq.2) rlam = 450.0d0
-      if(irlam.eq.3) rlam = 350.0d0
-      if(irlam.eq.4) rlam = 550.0d0*4
-      
-      zk = 2.0d0*pi/rlam
-
-      if(ippw.eq.1) ppw = 3
-      if(ippw.eq.2) ppw = 5
-      if(ippw.eq.3) ppw = 10
-      if(ippw.eq.4) ppw = 20
 
       call get_axissym_miniwasp_geom_mem(rlam,ppw,norder, &
         npatches_rhab, &
@@ -98,278 +45,8 @@
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)
 
-      npatches = npatches_rhab + npatches_cone + npatches_lens
-!     
-!      npatches = npatches_rhab
-      npols = (norder+1)*(norder+2)/2
-      npts = npatches*npols
-      allocate(srcvals(12,npts),srccoefs(9,npts))
-      allocate(iptype(npatches),ixyzs(npatches+1),norders(npatches))
-
-!
-!   combine all three components of geometry
-!
-!
-      istart = 0
-      do i=1,npts_rhab
-        srcvals(1:12,istart+i) = srcvals_rhab(1:12,i)
-        srccoefs(1:9,istart+i) = srccoefs_rhab(1:9,i)
-      enddo
-!      goto 1111
-
-      istart = istart + npts_rhab
-      do i=1,npts_cone
-        srcvals(1:12,istart+i) = srcvals_cone(1:12,i)
-        srccoefs(1:9,istart+i) = srccoefs_cone(1:9,i)
-      enddo
-
-      istart = istart + npts_cone
-      do i=1,npts_lens
-        srcvals(1:12,istart+i) = srcvals_lens(1:12,i)
-        srccoefs(1:9,istart+i) = srccoefs_lens(1:9,i)
-      enddo
- 
-! 1111 continue
-
-      do i=1,npatches
-        norders(i) = norder
-        ixyzs(i) = (i-1)*npols+1
-        iptype(i) = 1
-      enddo
-      ixyzs(npatches+1) = npts+1
-      
-
-      allocate(wts(npts))
-      call get_qwts(npatches,norders,ixyzs,iptype,npts,srcvals,wts)
-
-      print *, "npatches_use=",npatches
-
-      allocate(sigma(npts),rhs(npts))
-!
-!  get boundary definition at various z slices
-!
-!
-
-      nz = 5
-      nskip = 5
-      allocate(rzbdry(2,nz))
-      call get_rzbdry(nz,nskip,rzbdry)
-      call prin2('rzbdry=*',rzbdry,2*nz)
-
-      nrin = 3
-      ntin = 10
-
-
-!
-!  get points in the interior for analytic solution test
-!
-!
-      nin= nz*nrin*ntin
-      allocate(xyz_in(3,nin),charges_in(nin))
-      allocate(dpot(nin),ipatch_id_in(nin),uvs_targ_in(2,nin))
-      allocate(dsigma(npts))
-      do i=1,npts
-        dsigma(i) = 1.0d0
-      enddo
-      ii = 0
-      do iz=1,nz
-        z0 = rzbdry(2,iz)
-        r0 = rzbdry(1,iz)
-        do ir=1,nrin
-          rr = (ir-0.5d0)/(nrin+0.0d0)*0.5d0*r0
-          do itt = 1,ntin
-            thet = (itt-1.0d0)/(ntin+0.0d0)*2*pi
-            ii = ii +1
-            xyz_in(1,ii) = rr*cos(thet)
-            xyz_in(2,ii) = rr*sin(thet)
-            xyz_in(3,ii) = z0
-            charges_in(ii) = (hkrand(0)-0.5d0) + ima*(hkrand(0)-0.5d0)
-            ipatch_id_in(ii) = -1
-            uvs_targ_in(1:2,ii) = 0
-          enddo
-        enddo
-      enddo
-
-      dpars(1) = 0
-      dpars(2) = 1.0d0
-      eps = 1.0d-8
-      ndtarg = 3
-      call lpcomp_lap_comb_dir(npatches,norders,ixyzs,iptype, &
-       npts,srccoefs,srcvals,ndtarg,nin,xyz_in,ipatch_id_in,uvs_targ_in, &
-       eps,dpars,dsigma,dpot)
-      
-
-
-      thet0 = pi/20.0d0
-      phi0 = pi/4.5d0
-      if(ibc.eq.0) then
-        ra = 0
-        do i=1,npts
-          rhs(i) = 0.0d0
-          do ii=1,nin
-            call h3d_slp(xyz_in(1,ii),3,srcvals(1,i),0,dpars,1,zk,0, &
-               ipars,pottmp)
-            rhs(i) = rhs(i) + pottmp*charges_in(ii)
-          enddo
-          ra = ra + abs(rhs(i))**2*wts(i)
-        enddo
-        ra = sqrt(ra)
-        call prin2('l2 norm of boundary data=*',ra,1)
-      else
-        do i=1,npts
-          dprod = srcvals(1,i)*sin(thet0)*cos(phi0) + &
-              srcvals(2,i)*sin(thet0)*sin(phi0) + &
-              srcvals(3,i)*cos(thet0)
-           rhs(i) = -exp(ima*zk*dprod)
-        enddo
-      endif
-
-      eps = 1.0d-8
-      eps_gmres = 1.0d-9
-      numit = 400
-      ifinout = 1
-      zpars(1) = zk
-      zpars(2) = -ima*zk
-      zpars(3) = 1.0d0
-
-!      goto 1121
-      call helm_comb_dir_solver(npatches,norders,ixyzs,iptype,npts, &
-        srccoefs,srcvals,eps,zpars,numit,ifinout,rhs,eps_gmres,niter, &
-        errs,rres,sigma)
- 1121 continue 
-
-
- 
-
-      nt = 10
-      nr = 10
-
-      ntarg = nt*nz*nr
-      allocate(targs(3,ntarg))
-      allocate(pot(ntarg),potex(ntarg))
-
-      ndtarg = 3
-      ii = 0
-      do iz=1,nz
-        z0 = rzbdry(2,iz)
-        r0 = rzbdry(1,iz)
-        do ir=1,nr
-          rexp = -2 + (ir-1.0d0)/(nr-1.0d0)*1
-          r =(1.0d0+10**(rexp))
-          rr = r0*r
-          do itt = 1,nt
-            thet = (itt-1.0d0)/(ntin+0.0d0)*2*pi
-            ii = ii +1
-            targs(1,ii) = rr*cos(thet)
-            targs(2,ii) = rr*sin(thet)
-            targs(3,ii) = z0
-            pot(ii) = 0
-            potex(ii) = 0
-          enddo
-        enddo
-      enddo
-      
-
-      allocate(ipatch_id(ntarg),uvs_targ(2,ntarg))
-      do i=1,ntarg
-        ipatch_id(i) = -1
-        uvs_targ(1,i) = 0
-        uvs_targ(2,i) = 0
-      enddo
-      deallocate(dpot)
-      allocate(dpot(ntarg))
-
-      dpars(1) = 0
-      dpars(2) = 1.0d0
-      eps = 1.0d-8
-      ndtarg = 3
-      call lpcomp_lap_comb_dir(npatches,norders,ixyzs,iptype, &
-       npts,srccoefs,srcvals,ndtarg,ntarg,targs,ipatch_id,uvs_targ, &
-       eps,dpars,dsigma,dpot)
-      
-      eps = 1.0d-8
-
-
-      call lpcomp_helm_comb_dir(npatches,norders,ixyzs,iptype, &
-       npts,srccoefs,srcvals,ndtarg,ntarg,targs,ipatch_id,uvs_targ, &
-       eps,zpars,sigma,pot)
-
-
-      
-      ra = 0
-      do i=1,npts
-        ra  = ra + abs(sigma(i))**2*wts(i)
-      enddo
-      ra = sqrt(ra)
-      call prin2('l2 norm of density=*',ra,1)
-
-      open(unit=33,file='axissym_pottar.dat')
-      if(ibc.eq.0) then
-        erra = 0.0d0
-!        ra = 0.0d0
-        do i=1,ntarg
-          potex(i) = 0
-          do ii=1,nin
-            call h3d_slp(xyz_in(1,ii),3,targs(1,i),0,dpars,1,zk,0, &
-              ipars,pottmp)
-            potex(i) = potex(i) + pottmp*charges_in(ii)
-          enddo
-          erra = erra + abs(pot(i)-potex(i))**2
-          write(33,'(5(2x,e11.5))') real(pot(i)),real(potex(i)), &
-            imag(pot(i)),imag(potex(i)), abs(pot(i)-potex(i))
-!          ra = ra + abs(potex(i))**2
-         enddo
-         print *, "ra=",ra
-         erra = sqrt(erra/ra)
-         print *, "error in potential at targets=",npatches,erra
-       endif
-
-       if(ibc.eq.1) then
-         write(fname,'(a,i1,a,i1,a)') 'axissym_pot_norder', &
-            norder,'_ippw',ippw,'.dat'
-         open(unit=33,file=trim(fname))
-         do i=1,ntarg
-           write(33,*) real(pot(i)),imag(pot(i))
-         enddo
-         close(33)
-         write(fname,'(a,i1,a,i1,a)') 'axissym_sigma_norder', &
-            norder,'_ippw',ippw,'.dat'
-         open(unit=33,file=trim(fname))
-         do i=1,npts
-           write(33,*) real(sigma(i)),imag(sigma(i))
-         enddo
-         close(33)
-       endif
-
-       allocate(errp(npatches))
-       call surf_fun_error(2,npatches,norders,ixyzs,iptype,npts,sigma, &
-         wts,errp,errm)
-       print *, "estimated error in density=",errm
-       write(fname,'(a,i1,a,i1,a)') 'axissym_sigma_norder', &
-         norder,'_ippw',ippw,'.vtk'
-
-       allocate(errp_plot(npts))
-       do ipatch=1,npatches
-         do i = ixyzs(ipatch),ixyzs(ipatch+1)-1
-           errp_plot(i) = log(errp(ipatch))/log(10.0d0)
-         enddo
-       enddo
-
-       call surf_vtk_plot_scalar(npatches,norders,ixyzs,iptype, &
-         npts,srccoefs,srcvals,errp_plot,trim(fname),'a')
-       
-        
-       
-
-
-
-
       stop
       end
-!
-!
-!
-!
       
       
       subroutine get_axissym_miniwasp_geom_mem(rlam,ppw,norder, &
@@ -400,7 +77,6 @@
 
       real *8, allocatable :: rzvals_lens(:,:,:),rzcoeffs_lens(:,:,:)
       real *8, allocatable :: whts_lens(:,:)
-      integer ppw
 
 
       character (len=1000) fname1,fname2,fname3
@@ -434,12 +110,27 @@
       nv_cone = 6
       nv_lens = 5
 
-      call get_verts_mwaxissym(verts_rhab,nv_rhab,verts_cone,nv_cone, &
-        verts_lens, nv_lens)
-      call prin2('verts_rhab=*',verts_rhab,2*nv_rhab)
-      call prin2('verts_rhab=*',verts_cone,2*nv_cone)
-      call prin2('verts_rhab=*',verts_lens,2*nv_lens)
+      fname1 = '../geometries/rhabdom_axissym_pts.dat'
+      fname2 = '../geometries/cone_axissym_pts.dat'
+      fname3 = '../geometries/lens_axissym_pts.dat'
 
+      open(unit=33,file=trim(fname1))
+      do i=1,nv_rhab
+        read(33,*) verts_rhab(1,i),verts_rhab(2,i)
+      enddo
+      close(33)
+
+      open(unit=33,file=trim(fname2))
+      do i=1,nv_cone
+        read(33,*) verts_cone(1,i),verts_cone(2,i)
+      enddo
+      close(33)
+
+      open(unit=33,file=trim(fname3))
+      do i=1,nv_lens
+        read(33,*) verts_lens(1,i),verts_lens(2,i)
+      enddo
+      close(33)
 !
 !  Compute widths for smoothing
 !
@@ -669,13 +360,28 @@
       nv_rhab = 4
       nv_cone = 6
       nv_lens = 5
-      call get_verts_mwaxissym(verts_rhab,nv_rhab,verts_cone,nv_cone, &
-        verts_lens, nv_lens)
-      call prin2('verts_rhab=*',verts_rhab,2*nv_rhab)
-      call prin2('verts_rhab=*',verts_cone,2*nv_cone)
-      call prin2('verts_rhab=*',verts_lens,2*nv_lens)
 
+      fname1 = '../geometries/rhabdom_axissym_pts.dat'
+      fname2 = '../geometries/cone_axissym_pts.dat'
+      fname3 = '../geometries/lens_axissym_pts.dat'
 
+      open(unit=33,file=trim(fname1))
+      do i=1,nv_rhab
+        read(33,*) verts_rhab(1,i),verts_rhab(2,i)
+      enddo
+      close(33)
+
+      open(unit=33,file=trim(fname2))
+      do i=1,nv_cone
+        read(33,*) verts_cone(1,i),verts_cone(2,i)
+      enddo
+      close(33)
+
+      open(unit=33,file=trim(fname3))
+      do i=1,nv_lens
+        read(33,*) verts_lens(1,i),verts_lens(2,i)
+      enddo
+      close(33)
 !
 !  Compute widths for smoothing
 !
@@ -1024,8 +730,8 @@
       umin = -1.0d0
       umax = 1.0d0
       
-      vmin = 2*pi
-      vmax = 0
+      vmin = 0
+      vmax = 2*pi
 
       allocate(triaskel(3,3,npatches))
       allocate(ichuse(npatches))
@@ -1042,6 +748,11 @@
         rlen = 0.0d0
         rs(1:2) = 0
 
+        if(ich.eq.56) then
+          call prin2('rzvals=*',rzvals(1,1:k,ich),k)
+          call prin2('rzvals=*',rzvals(3,1:k,ich),k)
+          call prin2('rzvals=*',rzvals(4,1:k,ich),k)
+        endif
         do j=1,k
           rs(1:2) = rs(1:2) + amatrint(1:2,j)*rzvals(1,j,ich)
           if(rzvals(1,j,ich).ge.rmax) rmax = rzvals(1,j,ich)
@@ -1055,7 +766,7 @@
         nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))
         call xtri_rectmesh_ani(umin,umax,vmin,vmax,ns,nt,nover, &
           npatches,npatches0,triaskel(1,1,istart))
-        ichuse(istart:(istart+2*ns*nt-1)) = ich 
+        ichuse(istart:istart+2*ns*nt-1) = ich 
         istart = istart + 2*ns*nt
       enddo
 
@@ -1063,6 +774,11 @@
       print *, "kuse=",kuse
       print *, "norder=",norder
 
+      open(unit=35,file='tmp1.dat')
+      do i=1,npatches
+        write(35,*) i,ichuse(i)
+
+      enddo
 
       allocate(rzcoefs_tmp(6,k,nch))
       rzcoefs_tmp = rzcoefs
@@ -1160,7 +876,6 @@
       z = 0
       drds = 0
       dzds = 0
-      pols = 0
       call legepols(s,k-1,pols)
       do j=1,k
         r = r + rzcoefs(1,j,ich)*pols(j)
@@ -1188,40 +903,6 @@
 
       return
       end subroutine xtri_axissym_chunk
-!
-!
-!
-!
-!
-      subroutine get_rzbdry(nz,nskip,rzbdry)
-      implicit real *8 (a-h,o-z)
-      real *8 rzbdryall(2,17),rzbdry(2,nz)
-      data rzbdryall/ &
-       150.779295752848,1000,&
-       211.307081823032,2000,&
-       271.834867893216,3000,&
-       332.3626539634,4000,&
-       392.890440033584,5000,&
-       453.418226103768,6000,&
-       513.946012173952,7000,&
-       574.473798244136,8000,&
-       635.00158431432,9000,&
-       695.529370384504,10000,&
-       756.057156454688,11000,&
-       816.584942524872,12000,&
-       877.112728595056,13000,&
-       907.155903632639,14000,&
-       1452.26059023509,15000,&
-       1997.36527683753,16000,&
-       1685.75362372017,17000/
-
-       do i=1,nz
-         rzbdry(1,i) = rzbdryall(1,i+nskip)
-         rzbdry(2,i) = rzbdryall(2,i+nskip)
-       enddo
-
-
-      end subroutine get_rzbdry
 
 
 
@@ -1231,38 +912,4 @@
 
 
 
-      subroutine get_verts_mwaxissym(verts_rhab,nv_rhab,verts_cone, &
-        nv_cone, verts_lens, nv_lens)
-      implicit real *8 (a-h,o-z)
-      real *8 verts_rhab(2,nv_rhab),verts_cone(2,nv_cone)
-      real *8 verts_lens(2,nv_lens)
 
-      real *8 vrhab(2,4)
-      real *8 vcone(2,6)
-      real *8 vlens(2,5)
-
-      data vrhab/ &
-        0,0,&
-        90.251509682664,0,&
-        902.51509682664,13419.6811064943,&
-        0,13419.6811064943/
-      data vcone/ &
-        0,13660.3517989814,&
-        722.012077461312,13660.3517989814,&
-        2142.61551613909,16266.4630168691,&
-        1787.46465646965,16917.990821341,&
-        599.396363018662,16266.4630168691,&
-        0,16266.4630168691/
-      data vlens/&
-        0,16386.7983631126,&
-        541.802017255196,16386.7983631126,&
-        1729.87031070618,17023.6482247334,&
-        541.802017255196,17689.8539720565,&
-        0,17689.8539720565/
-      
-      verts_rhab(1:2,1:4) = vrhab
-      verts_cone(1:2,1:6) = vcone
-      verts_lens(1:2,1:5) = vlens
-
-
-      end subroutine get_verts_mwaxissym

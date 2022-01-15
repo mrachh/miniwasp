@@ -62,11 +62,15 @@ FEND = -L${FMMBIE_INSTALL_DIR} $(LLINKLIB) -L${FMM_INSTALL_DIR} $(LFMMLINKLIB)
 
 .PHONY: all clean 
 
-OBJECTS =  test_ellipsoid.o \
+OBJECTS =  test_axissym_geom.o \
   $ ../src/topol_sort.o \
   $ ../src/plot_tools.o \
   $ ../src/em_muller_trans_v2.o \
   $ ../src/surf_routs.o \
+  $ ../src/corners.o \
+  $ ../src/qerrfun.o \
+  $ ../src/chunks.o \
+  $ ../src/pplot.o \
 #
 # use only the file part of the filename, then manually specify
 # the build location
