@@ -1293,8 +1293,8 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       norder_avg = floor(sum(norders)/(npatches+0.0d0))
 
       call get_rfacs(norder_avg,iptype_avg,rfac,rfac0)
-      rfac = 2.0d0
-      rfac0 = 2.0d0
+!      rfac = 2.0d0
+!      rfac0 = 2.0d0
 !      rfac = 4.0d0
       print *, rfac, rfac0
 
@@ -1335,6 +1335,7 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       allocate(novers(npatches),ixyzso(npatches+1))
 
       print *, "beginning far order estimation"
+
 
       call get_far_order(eps,npatches,norders,ixyzs,iptype,cms,&
      &rads,npts,srccoefs,ndtarg,npts,targs,ikerorder,zpars(1),&
@@ -1418,6 +1419,7 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
       print *, "nquadsub=",nquadsub
 
       print *, "thresh=",thresh
+!      goto 1112
       call cpu_time(t1)
 !$      t1 = omp_get_wtime()      
       ndtarg=20
@@ -1429,7 +1431,7 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 !$      t2 = omp_get_wtime()     
 
       call prin2('quadrature subtraction generation time=*',t2-t1,1)
-
+ 1112 continue
 
       print *, "done generating near quadrature, now starting gmres"
       ndtarg=12
@@ -1578,6 +1580,540 @@ subroutine em_muller_trans_v2_solver(npatches,norders,ixyzs,&
 !
       return
       end subroutine em_muller_trans_v2_solver
+!
+!
+!
+
+
+subroutine em_muller_trans_v2_solver_woversamp(npatches,norders,ixyzs,&
+     &iptype,npts,srccoefs,srcvals,eps,zpars,numit,ifinout,&
+     &rhs,eps_gmres,niter,errs,rres,soln,contrast_matrix,&
+     &npts_vect,n_components,srcvals_extended)
+!
+!  This subroutine solves the Scattering Maxwell homogeneous dielectric
+!  problem.
+!  The the equations are:
+!
+!    \nabla \times E_{j} = i k_{j} H_{j} \in \Omega_{j}
+!    \nabla \times H_{j} = -i k_{j} E_{j} \in \Omega_{j}
+!
+!  Representation: 
+!
+!    E_{j} = i\omega A_{j} - \nabla \phi_{j} - \nabla \times B_{j}/ep_{j}
+!    H_{j} = \nabla \times A_{0}/mu_{j} + - \nabla \psi_{k} + i\omega A_{j}
+!
+!    where A_{j} = \mu_{j} S_{k_{j}}[a]/\ep_{j}
+!    where B_{j} = \ep_{j} S_{k_{j}}[b]/\mu_{j}
+!
+!    with k_{j} = \omega \sqrt{\ep_{j}} \sqrt{\mu_{j}}
+!    and a,b are unknown surface currents, and
+!
+!    \psi_{j} = \nabla \cdot B_{j}/(i \omega \ep_{j} \mu_{j})
+!    \phi_{j} = \nabla \cdot A_{j}/(i \omega \ep_{j} \mu_{j})
+!
+!  Boundary conditions imposed are: (2)
+!
+!    n\times E0-n\timesE1  = -n\times E_{inc}     \dot X_{u}/(\mu + \mu_0)
+!    n\times E0-n\timesE1  = -n\times E_{inc}     \dot X_{v}/(\mu + \mu_0)
+!    n\times H0-n\timesH1 = -n\times H_{inc}      \dot X_{u}/(\ep + \ep_0)
+!    n\times H0-n\timesH1 = -n\times H_{inc}      \dot X_{v}/(\ep + \ep_0)
+!
+!
+!  The linear system is solved iteratively using GMRES
+!  until a relative residual of  eps_gmres is reached
+!
+!  input:
+!    npatches - integer
+!      number of patches
+!
+!    norders- integer(npatches)
+!      order of discretization on each patch 
+!
+!    ixyzs - integer(npatches+1)
+!      ixyzs(i) denotes the starting location in srccoefs,
+!      and srcvals array corresponding to patch i
+!   
+!    iptype - integer(npatches)
+!      type of patch
+!      iptype = 1, triangular patch discretized using RV nodes
+!
+!    npts - integer
+!      total number of discretization points on the boundary
+! 
+!    srccoefs - real *8 (9,npts)
+!      koornwinder expansion coefficients of xyz, dxyz/du,
+!      and dxyz/dv on each patch. 
+!      For each point srccoefs(1:3,i) is xyz info
+!        srccoefs(4:6,i) is dxyz/du info
+!        srccoefs(7:9,i) is dxyz/dv info
+!
+!    srcvals - real *8 (12,npts)
+!      xyz(u,v) and derivative info sampled at the 
+!      discretization nodes on the surface
+!      srcvals(1:3,i) - xyz info
+!      srcvals(4:6,i) - dxyz/du info
+!      srcvals(7:9,i) - dxyz/dv info
+! 
+!    eps - real *8
+!      precision requested for computing quadrature and fmm
+!      tolerance
+!
+!    zpars - complex *16 (5)
+!      kernel parameters 
+!      zpars(1) = omega 
+!      zpars(2) = ep0
+!      zpars(3) = mu0
+!      zpars(4) = ep1
+!      zpars(5) = mu1
+!
+!    ifinout - integer
+!      flag for interior or exterior problems (normals assumed to 
+!        be pointing in exterior of region)
+!      ifinout = 0, interior problem
+!      ifinout = 1, exterior problem
+!
+!    rhs - complex *16(4*npts)
+!      right hand side
+!
+!    eps_gmres - real *8
+!      gmres tolerance requested
+!
+!    numit - integer
+!      max number of gmres iterations
+!
+!    output
+!      niter - integer
+!      number of gmres iterations required for relative residual
+!      to converge to 1e-15
+!          
+!    errs(1:iter) - relative residual as a function of iteration
+!      number
+! 
+!    rres - real *8
+!      relative residual for computed solution
+!              
+!    soln - complex *16(4*npts)
+!      soln(1:npts) component of the tangent induced current a on the 
+!        surface along srcvals(4:6,i) direction
+!      soln(npts+1:2*npts) component of the tangent induced current a 
+!        on the surface along (srcvals(10:12,i) x srcvals(4:6,i)) 
+!        direction
+!      soln(2*npts+1:3*npts) component of the tangent induced current
+!        a on the surface along srcvals(4:6,i) direction
+!      soln(3*npts+1:4*npts) component of the tangent induced current
+!        a on the surface along (srcvals(10:12,i) x srcvals(4:6,i))
+!        direction
+!
+
+      implicit none
+
+      integer, intent(in) :: n_components
+      integer, intent(in) :: npts_vect(n_components)
+      complex *16, intent(in) :: contrast_matrix(4,n_components)
+      real *8, intent(in) :: srcvals_extended(20,npts)
+
+      integer npatches,norder,npols,npts
+      integer ifinout
+      integer norders(npatches),ixyzs(npatches+1)
+      integer iptype(npatches)
+      real *8 srccoefs(9,npts),srcvals(12,npts),eps,eps_gmres
+      complex *16 zpars(5)
+      complex *16 rhs(4*npts)
+      complex *16 soln(4*npts)
+
+      real *8, allocatable :: targs(:,:)
+      integer, allocatable :: ipatch_id(:)
+      real *8, allocatable :: uvs_targ(:,:)
+      integer ndtarg,ntarg
+
+      real *8 errs(numit+1)
+      real *8 rres,eps2
+      integer niter
+
+
+      integer nover,npolso,nptso
+      integer nnz,nquad,nquadsub
+      integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
+      integer, allocatable :: iquadsub(:)
+
+      complex *16, allocatable :: wnear(:,:)
+      complex *16, allocatable :: wnearsub(:,:)
+
+      real *8, allocatable :: srcover(:,:),wover(:)
+      integer, allocatable :: ixyzso(:),novers(:)
+
+      real *8, allocatable :: cms(:,:),rads(:),rad_near(:) 
+
+      integer i,j,jpatch,jquadstart,jstart
+
+      integer ipars(2)
+      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime
+
+
+      real *8 ttot,done,pi
+      real *8 rfac,rfac0
+      integer iptype_avg,norder_avg
+      integer ikerorder, iquadtype,npts_over
+	    integer n_var
+
+!
+!
+!       gmres variables
+!
+      complex *16 zid,ztmp
+      real *8 rb,wnrm2
+      integer numit,it,iind,it1,k,l,count1
+      real *8 rmyerr,tt1,tt2
+      complex *16 temp
+      complex *16, allocatable :: vmat(:,:),hmat(:,:)
+      complex *16, allocatable :: cs(:),sn(:)
+      complex *16, allocatable :: svec(:),yvec(:),wtmp(:)
+      complex *16 ima
+
+      real *8 thresh
+
+      ima=(0.0d0,1.0d0)
+  
+!
+!   n_var is the number of unknowns in the linear system.
+!   as we have tow vector unknown a,b and two scalars rho,sigma
+!   we need n_var=6*npts
+!
+
+      n_var=4*npts
+
+      allocate(vmat(n_var,numit+1),hmat(numit,numit))
+      allocate(cs(numit),sn(numit))
+      allocate(wtmp(n_var),svec(numit+1),yvec(numit+1))
+
+
+      done = 1
+      pi = atan(done)*4
+
+
+!
+!        setup targets as on surface discretization points
+! 
+      ndtarg = 12
+      ntarg = npts
+      allocate(targs(ndtarg,npts),uvs_targ(2,ntarg),ipatch_id(ntarg))
+!$OMP PARALLEL DO DEFAULT(SHARED)
+      do i=1,ntarg
+        targs(:,i)=srcvals(:,i)
+        ipatch_id(i) = -1
+        uvs_targ(1,i) = 0
+        uvs_targ(2,i) = 0
+      enddo
+!$OMP END PARALLEL DO   
+
+
+!
+!    initialize patch_id and uv_targ for on surface targets
+!
+      call get_patch_id_uvs(npatches,norders,ixyzs,iptype,npts,&
+     &ipatch_id,uvs_targ)
+
+!
+!
+!        this might need fixing
+!
+      iptype_avg = floor(sum(iptype)/(npatches+0.0d0))
+      norder_avg = floor(sum(norders)/(npatches+0.0d0))
+
+      call get_rfacs(norder_avg,iptype_avg,rfac,rfac0)
+!      rfac = 2.0d0
+!      rfac0 = 2.0d0
+!      rfac = 4.0d0
+      print *, rfac, rfac0
+
+
+      allocate(cms(3,npatches),rads(npatches),rad_near(npatches))
+
+      call get_centroid_rads(npatches,norders,ixyzs,iptype,npts,& 
+     &srccoefs,cms,rads)
+
+!$OMP PARALLEL DO DEFAULT(SHARED) 
+      do i=1,npatches
+        rad_near(i) = rads(i)*rfac
+      enddo
+!$OMP END PARALLEL DO      
+
+!
+!    find near quadrature correction interactions
+!
+      print *, "entering find near mem"
+      call findnearmem(cms,npatches,rad_near,ndtarg,targs,npts,nnz)
+      print *, "nnz=",nnz
+
+      allocate(row_ptr(npts+1),col_ind(nnz))
+      
+      call findnear(cms,npatches,rad_near,ndtarg,targs,npts,row_ptr,&
+     &col_ind)
+
+      allocate(iquad(nnz+1)) 
+      call get_iquad_rsc(npatches,ixyzs,npts,nnz,row_ptr,col_ind,&
+     &iquad)
+
+      ikerorder = 0
+
+!
+!    estimate oversampling for far-field, and oversample geometry
+!
+
+      allocate(novers(npatches),ixyzso(npatches+1))
+
+      print *, "beginning far order estimation"
+
+
+!      call get_far_order(eps,npatches,norders,ixyzs,iptype,cms,&
+!     &rads,npts,srccoefs,ndtarg,npts,targs,ikerorder,zpars(1),&
+!     &nnz,row_ptr,col_ind,rfac,novers,ixyzso)
+
+      do i=1,npatches
+        novers(i) = norders(i)
+        ixyzso(i) = ixyzs(i)
+      enddo
+      ixyzso(npatches+1) = ixyzs(npatches+1)
+
+      npts_over = ixyzso(npatches+1)-1
+      print *, "npts_over=",npts_over
+      print *, "npts=",npts
+      print *, "oversamp=",(npts_over+0.0d0)/npts
+
+
+      allocate(srcover(12,npts_over),wover(npts_over))
+
+      call oversample_geom(npatches,norders,ixyzs,iptype,npts,&
+     &srccoefs,srcvals,novers,ixyzso,npts_over,srcover)
+
+      call get_qwts(npatches,novers,ixyzso,iptype,npts_over,&
+     &srcover,wover)
+
+
+!
+!   compute near quadrature correction
+!
+      nquad = iquad(nnz+1)-1
+      print *, "nquad=",nquad
+      allocate(wnear(nquad,16))
+      do j=1,16
+!$OMP PARALLEL DO DEFAULT(SHARED)      
+        do i=1,nquad
+          wnear(i,j)=0
+        enddo
+!$OMP END PARALLEL DO    
+      enddo
+
+
+      allocate(iquadsub(nnz+1)) 
+      call get_iquad_rsc(npatches,ixyzso,npts,nnz,row_ptr,col_ind,&
+     &iquadsub)
+        
+      nquadsub = iquadsub(nnz+1)-1
+      print *, "nquadsub=",nquadsub
+
+      allocate(wnearsub(nquadsub,16))
+
+      do j=1,16
+!$OMP PARALLEL DO DEFAULT(SHARED)      
+        do i=1,nquadsub
+          wnearsub(i,j)=0
+        enddo
+!$OMP END PARALLEL DO    
+      enddo
+
+      iquadtype = 1
+
+!!      eps2 = 1.0d-8
+
+      print *, "starting to generate near quadrature"
+!      goto 1111
+      call cpu_time(t1)
+!$      t1 = omp_get_wtime()      
+      ndtarg=20
+      call getnearquad_em_muller_trans_v2(npatches,norders,&
+     &ixyzs,iptype,npts,srccoefs,srcvals,ndtarg,npts,srcvals_extended,&
+     &ipatch_id,uvs_targ,eps,zpars,iquadtype,nnz,row_ptr,col_ind,&
+     &iquad,rfac0,nquad,wnear)
+      call cpu_time(t2)
+!$      t2 = omp_get_wtime()     
+
+      call prin2('quadrature generation time=*',t2-t1,1)
+ 1111 continue
+
+      call get_fmm_thresh(12,npts_over,srcover,ndtarg,npts,srcvals_extended,thresh)
+
+      call prinf('iquad=*',iquad,20)
+      call prinf('iquadsub=*',iquadsub,20)
+
+      call prinf('ixyzs=*',ixyzs,20)
+      call prinf('ixyzso=*',ixyzso,20)
+
+      print *, "nquad=",nquad
+      print *, "nquadsub=",nquadsub
+
+      print *, "thresh=",thresh
+!      goto 1112
+      call cpu_time(t1)
+!$      t1 = omp_get_wtime()      
+      ndtarg=20
+      call getnearquadsub_em_muller_trans_v2(npatches,norders,&
+     &ixyzso,iptype,npts_over,srcover,wover,ndtarg,npts,srcvals_extended,&
+     &ipatch_id,uvs_targ,thresh,zpars,iquadtype,nnz,row_ptr,col_ind,&
+     &iquadsub,nquadsub,wnearsub)
+      call cpu_time(t2)
+!$      t2 = omp_get_wtime()     
+
+      call prin2('quadrature subtraction generation time=*',t2-t1,1)
+ 1112 continue
+
+      print *, "done generating near quadrature, now starting gmres"
+      ndtarg=12
+!
+!
+!     start gmres code here
+!
+!     NOTE: matrix equation should be of the form (z*I + K)x = y
+!       the identity scaling (z) is defined via zid below,
+!       and K represents the action of the principal value 
+!       part of the matvec
+!
+
+      zid=0.5d0
+
+
+      niter=0
+
+!
+!      compute norm of right hand side and initialize v
+! 
+      rb = 0
+
+      do i=1,numit
+        cs(i) = 0
+        sn(i) = 0
+      enddo
+!
+      do i=1,n_var
+        rb = rb + abs(rhs(i))**2
+      enddo
+      rb = sqrt(rb)
+
+      do i=1,n_var
+        vmat(i,1) = rhs(i)/rb
+      enddo
+
+      svec(1) = rb
+
+      do it=1,numit
+        it1 = it + 1
+
+        call cpu_time(tt1)
+!$        tt1 = omp_get_wtime()  
+        call lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,&
+     &iptype,npts,srccoefs,srcvals,ndtarg,npts,targs,&
+     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,iquadsub,nquadsub,&
+     &vmat(1,it),novers,npts_over,ixyzso,srcover,wover,wtmp,wnear,&
+     &wnearsub,n_components,contrast_matrix,npts_vect)
+        call cpu_time(tt2)
+!$        tt2 = omp_get_wtime()  
+        print *, it,tt2-tt1
+        do k=1,it
+          hmat(k,it) = 0
+          do j=1,n_var      
+            hmat(k,it) = hmat(k,it) + wtmp(j)*conjg(vmat(j,k))
+          enddo
+
+          do j=1,n_var
+            wtmp(j) = wtmp(j)-hmat(k,it)*vmat(j,k)
+          enddo
+        enddo
+          
+        hmat(it,it) = hmat(it,it)+zid
+        wnrm2 = 0
+        do j=1,n_var
+          wnrm2 = wnrm2 + abs(wtmp(j))**2
+        enddo
+        wnrm2 = sqrt(wnrm2)
+
+        do j=1,n_var
+          vmat(j,it1) = wtmp(j)/wnrm2
+        enddo
+
+        do k=1,it-1
+          temp = cs(k)*hmat(k,it)+sn(k)*hmat(k+1,it)
+          hmat(k+1,it) = -sn(k)*hmat(k,it)+cs(k)*hmat(k+1,it)
+          hmat(k,it) = temp
+        enddo
+
+        ztmp = wnrm2
+
+        call zrotmat_gmres(hmat(it,it),ztmp,cs(it),sn(it))
+          
+        hmat(it,it) = cs(it)*hmat(it,it)+sn(it)*wnrm2
+        svec(it1) = -sn(it)*svec(it)
+        svec(it) = cs(it)*svec(it)
+        rmyerr = abs(svec(it1))/rb
+        errs(it) = rmyerr
+        print *, "iter=",it,errs(it)
+
+        if(rmyerr.le.eps_gmres.or.it.eq.numit) then
+
+!
+!            solve the linear system corresponding to
+!            upper triangular part of hmat to obtain yvec
+!
+!            y = triu(H(1:it,1:it))\s(1:it);
+!
+          do j=1,it
+            iind = it-j+1
+            yvec(iind) = svec(iind)
+            do l=iind+1,it
+              yvec(iind) = yvec(iind) - hmat(iind,l)*yvec(l)
+            enddo
+            yvec(iind) = yvec(iind)/hmat(iind,iind)
+          enddo
+
+!
+!          estimate x
+!
+          do j=1,n_var
+            soln(j) = 0
+            do i=1,it
+              soln(j) = soln(j) + yvec(i)*vmat(j,i)
+            enddo
+          enddo
+
+
+          rres = 0
+          do i=1,n_var
+            wtmp(i) = 0
+          enddo
+!
+!        NOTE:
+!        replace this routine by appropriate layer potential
+!        evaluation routine  
+!
+
+
+          call lpcomp_em_muller_trans_v2_addsub(npatches,norders,ixyzs,&
+     &iptype,npts,srccoefs,srcvals,ndtarg,npts,targs,&
+     &eps,zpars,nnz,row_ptr,col_ind,iquad,nquad,iquadsub,nquadsub,&
+     &soln,novers,npts_over,ixyzso,srcover,wover,wtmp,wnear,&
+     &wnearsub,n_components,contrast_matrix,npts_vect)
+
+            
+          do i=1,npts
+            rres = rres + abs(zid*soln(i) + wtmp(i)-rhs(i))**2
+          enddo
+          rres = sqrt(rres)/rb
+          niter = it
+          return
+        endif
+      enddo
+!
+      return
+      end subroutine em_muller_trans_v2_solver_woversamp
 !
 !
 !
@@ -1916,7 +2452,7 @@ end subroutine em_muller_trans_FMM
 !
 !
 !
-subroutine 	get_rhs_em_muller_trans_testing(P0,vf,direction,Pol,srcvals,omega,&
+subroutine get_rhs_em_muller_trans_testing(P0,vf,direction,Pol,srcvals,omega,&
  &RHS,n_components,npts_vect,contrast_matrix,ns,exposed_surfaces)
 implicit none
 
@@ -3725,16 +4261,16 @@ end subroutine get_curlcurlSka
 !       oversample density
 
     call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
-	&npts,sigma(1:npts),novers,ixyzso,ns,sigmaover(1:ns))
-	       
+     &npts,sigma(1:npts),novers,ixyzso,ns,sigmaover(1:ns))
+       
     call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,&
-	&npts,sigma(npts+1:2*npts),novers,ixyzso,ns,sigmaover(ns+1:2*ns))
+    &npts,sigma(npts+1:2*npts),novers,ixyzso,ns,sigmaover(ns+1:2*ns))
 
-	call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
-	&npts,sigma(2*npts+1:3*npts),novers,ixyzso,ns,sigmaover(2*ns+1:3*ns))
+    call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
+    &npts,sigma(2*npts+1:3*npts),novers,ixyzso,ns,sigmaover(2*ns+1:3*ns))
 
-	call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
-	&npts,sigma(3*npts+1:4*npts),novers,ixyzso,ns,sigmaover(3*ns+1:4*ns))
+    call oversample_fun_surf(2,npatches,norders,ixyzs,iptype,& 
+     &npts,sigma(3*npts+1:4*npts),novers,ixyzso,ns,sigmaover(3*ns+1:4*ns))
 
       ra = 0
 
@@ -3742,9 +4278,9 @@ end subroutine get_curlcurlSka
 !       fmm
 !
 
-		call get_fmm_thresh(12,ns,srcover,ndtarg,ntarg,targs,thresh)
+       call get_fmm_thresh(12,ns,srcover,ndtarg,ntarg,targs,thresh)
        ifdir=0
-	  
+  
     istart=1
     ifinish=ntarg_vect(1)
     !write (*,*) 'n_regions: ', n_regions
@@ -4178,6 +4714,159 @@ implicit none
 
 return
 end subroutine test_accuracy_em_muller
+!
+!
+!
+
+subroutine test_accuracy_em_muller_wfield(npatches,norders,ixyzs,iptype,npts,srccoefs,&
+    &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
+    &contrast_matrix,exposed_surfaces,eps,zpars,sigma,P0,vf,direction, &
+    &Pol,E_far, E_0, H_far, H_0, err_est)
+implicit none
+
+ !List of calling arguments
+ integer, intent(in) :: npatches,npts,n_components,ntarg
+ integer, intent(in) :: norders(npatches),npatches_vect(n_components),ixyzs(npatches+1),iptype(npatches)
+ real ( kind = 8 ), intent(in) :: srcvals(12,npts), srccoefs(9,npts),targ(3,ntarg),wts(npts)
+ integer, intent(in) :: sorted_vector(n_components+1)
+ complex ( kind = 8 ), intent(in) :: contrast_matrix(4,n_components),zpars(3),sigma(4*npts)
+ logical exposed_surfaces(n_components)
+ real ( kind = 8 ), intent(in) :: eps
+ real ( kind = 8 ), intent(in) :: P0(3), direction(2)
+ complex ( kind = 8 ), intent(in) :: vf(3),Pol(2)
+ complex *16, intent(out) :: E_far(3,ntarg), E_0(3,ntarg)
+ complex *16, intent(out) :: H_far(3,ntarg), H_0(3,ntarg)
+
+
+ !List of local variables
+ integer count1,count2,icount,icount2,n_aux,i1,i2,j1,j2,npatches_aux,npts_aux,x,ntarg_vect(n_components+1)
+ integer ndtarg,n_regions
+ integer, allocatable :: location_targs(:),permutation_targs(:)
+ integer, allocatable :: ipatch_id(:)
+ real *8, allocatable :: uvs_targ(:,:)
+
+ real *8, allocatable :: targ_sort(:,:),error_E(:),error_H(:),error_rel_E(:),error_rel_H(:)
+ complex ( kind = 8 ) ep0,mu0,ep,mu
+ complex ( kind = 8 ), allocatable :: E_far_aux(:,:),H_far_aux(:,:)
+ real *8 erre,errh,re,rh,err_est
+ character (len=100) nombre_plot
+ integer ( kind = 8 ) M_plot,N_plot
+
+
+ allocate(location_targs(ntarg),permutation_targs(ntarg))
+ allocate(ipatch_id(ntarg))
+ allocate(uvs_targ(2,ntarg))
+ allocate(targ_sort(7,ntarg))
+ allocate(E_far_aux(3,ntarg),H_far_aux(3,ntarg))
+ allocate(error_E(ntarg),error_H(ntarg))
+ allocate(error_rel_E(ntarg),error_rel_H(ntarg))
+
+  do count1=1,n_components+1
+    ntarg_vect(count1)=0
+  enddo
+
+  call find_inclusion_vect(npatches,norders,ixyzs,iptype,npts,srccoefs,&
+    &srcvals,wts,targ,ntarg,npatches_vect,n_components,sorted_vector,&
+    &location_targs,eps)
+  do count1=1,n_components
+    if (exposed_surfaces(count1)) then
+       ep0=contrast_matrix(1,count1)
+       mu0=contrast_matrix(2,count1)
+       exit
+    endif
+  enddo
+ icount=1
+ n_regions=0
+ do count1=0,n_components
+   icount2=0
+   do count2=1,ntarg
+    if (location_targs(count2).eq.count1) then
+      permutation_targs(count2)=icount
+      targ_sort(1:3,icount)=targ(:,count2)
+      if (count1.eq.0) then
+        targ_sort(4,icount)=real(ep0)
+        targ_sort(5,icount)=aimag(ep0)
+        targ_sort(6,icount)=real(mu0)
+        targ_sort(7,icount)=aimag(mu0)
+      else
+        targ_sort(4,icount)=real(contrast_matrix(3,count1))
+        targ_sort(5,icount)=aimag(contrast_matrix(3,count1))
+        targ_sort(6,icount)=real(contrast_matrix(4,count1))
+        targ_sort(7,icount)=aimag(contrast_matrix(4,count1))
+      endif
+      icount=icount+1
+      icount2=icount2+1
+    endif
+   enddo
+  if (icount2>0) then
+    n_regions=n_regions+1
+    ntarg_vect(n_regions) = icount2
+  endif
+ enddo
+ ndtarg=7
+ do count1=1,ntarg
+   ipatch_id(count1) = -1
+   uvs_targ(1,count1) = 0
+   uvs_targ(2,count1) = 0
+ enddo
+
+ call lpcomp_em_muller_far_dir(npatches,norders,ixyzs,&
+  &iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targ_sort,&
+  &ipatch_id,uvs_targ,eps,zpars,sigma,E_far_aux,H_far_aux,&
+  n_regions,ntarg_vect)
+ 
+ do count1=1,ntarg
+   E_far(:,count1)=E_far_aux(:,permutation_targs(count1))
+   H_far(:,count1)=H_far_aux(:,permutation_targs(count1))   
+ enddo
+
+ E_0 = 0
+ H_0 = 0
+ erre = 0
+ re = 0
+ errh = 0
+ rh = 0
+ do count1=1,ntarg
+  if (location_targs(count1).eq.0) then
+    if(count1.eq.1) then 
+     print *, "here1"
+     print *, "ep0=",ep0
+     print *, "mu0=",mu0
+    endif
+    call fieldsEDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
+     &E_0(:,count1),H_0(:,count1),vf,0)
+    call fieldsMDomega(zpars(1),ep0,mu0,P0,targ(1:3,count1),1,&
+     &E_0(:,count1),H_0(:,count1),vf,1)
+  else
+    ep=contrast_matrix(3,location_targs(count1))
+    mu=contrast_matrix(4,location_targs(count1))
+    call fieldsPWomega(zpars(1),ep,mu,targ(1:3,count1),1,&
+     &E_0(:,count1),H_0(:,count1),direction,Pol)
+  endif
+  error_E(count1)=sqrt(abs(E_0(1,count1)-E_far(1,count1))**2 + &
+     abs(E_0(2,count1)-E_far(2,count1))**2 + &
+     abs(E_0(3,count1)-E_far(3,count1))**2)
+  error_rel_E(count1)=error_E(count1)/sqrt(abs(E_0(1,count1))**2&
+     &+abs(E_0(2,count1))**2+abs(E_0(3,count1))**2)
+
+  error_H(count1)=sqrt(abs(H_0(1,count1)-H_far(1,count1))**2 + &
+   abs(H_0(2,count1)-H_far(2,count1))**2 + &
+   abs(H_0(3,count1)-H_far(3,count1))**2)
+  error_rel_H(count1)=error_H(count1)/sqrt(abs(H_0(1,count1))**2+&
+     &abs(H_0(2,count1))**2+abs(H_0(3,count1))**2)
+  erre = erre + error_E(count1)**2
+  errh = errh + error_H(count1)**2
+  re = re + abs(E_0(1,count1))**2 + abs(E_0(2,count1))**2 +  &
+     abs(E_0(3,count1))**2
+  rh = rh + abs(H_0(1,count1))**2 + abs(H_0(2,count1))**2 +  &
+    abs(H_0(3,count1))**2
+ enddo
+ err_est = sqrt((erre+errh)/(re+rh))
+
+
+return
+end subroutine test_accuracy_em_muller_wfield
+!
 !
 !
 !
