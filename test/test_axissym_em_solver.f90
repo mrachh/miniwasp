@@ -60,7 +60,7 @@
       
       
 
-      rpigm = 9094.9269d0
+      rpigm = 9094.9269d0*1.25d0
       zpigm = 8844.9269d0
 
       xyzc_pigm(1:3) = 0
@@ -76,10 +76,10 @@
 
 ! default values
       ppw = 5
-      norder = 3
+      norder = 5
       ibc = 0
       irlam = 4
-      iref = 1
+      iref = 3
 
 
       call get_command_argument(1,arg_comm)
@@ -107,8 +107,8 @@
       if(idis.eq.1) zpig = 1.34d0 + 0.005d0*ima
 !      zpig = 1.13d0
 
-      eps = 1.0d-6
-      eps_gmres = 1.0d-7
+      eps = 1.0d-7
+      eps_gmres = 1.0d-9
       numit = 400
 
       direction(1) = 0
@@ -277,6 +277,7 @@
       nt = 0
       call get_bsize(12,npts,srcvals,3,nt,tmp,bsize)
       rsc = 1.0d0/bsize
+      rsc = 1.0d0
 
       do i=1,npts
         do j=1,9
@@ -417,7 +418,7 @@
       sigma = 0
 
 !      goto 1111 
-      call em_muller_trans_v2_solver_woversamp(npatches,norders,ixyzs,iptype, &
+      call em_muller_trans_v2_solver(npatches,norders,ixyzs,iptype, &
         npts,srccoefs,srcvals,eps,zpars,numit,ifinout,rhs,eps_gmres, &
         niter,errs,rres,sigma,contrast_matrix,npts_vect,n_components, &
         srcvals_extended)
@@ -1097,8 +1098,9 @@
         if(rs(1).ge.rmax) rmax = rs(1)
         if(rs(2).ge.rmax) rmax = rs(2)
 
-        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
-        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
+        ns = max(ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0)),4)*iref
+        nt = max(ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0)),4)*iref
+        print *, ich,ns,nt
         npatches = npatches + 2*ns*nt
       enddo
 
@@ -1221,8 +1223,8 @@
         if(rs(1).ge.rmax) rmax = rs(1)
         if(rs(2).ge.rmax) rmax = rs(2)
 
-        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
-        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
+        ns = max(ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0)),4)*iref
+        nt = max(ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0)),4)*iref
         call xtri_rectmesh_ani(umin,umax,vmin,vmax,ns,nt,nover, &
           npatches,npatches0,triaskel(1,1,istart))
         ichuse(istart:(istart+2*ns*nt-1)) = ich 
