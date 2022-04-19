@@ -174,13 +174,13 @@
       allocate(iptype_pigm(npatches_pigm),ixyzs_pigm(npatches_pigm+1))
       allocate(norders_pigm(npatches_pigm))
       
-      ifplot = 1
+      ifplot = 0
 
       call get_axissym_miniwasp_geom(rlam0,ppw,iref,norder, &
         npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
-        norders_cone, ixyzys_cone, iptype_cone, npts_cone, &
+        norders_cone, ixyzs_cone, iptype_cone, npts_cone, &
         srcvals_cone, srccoefs_cone, npatches_lens, &
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)
@@ -319,6 +319,7 @@
 
       print *, "npatches_use=",npatches
 
+
 !
 !  get boundary definition at various z slices
 !
@@ -355,10 +356,9 @@
         iptype_lens,npts_lens,srccoefs_lens,cms_lens,rads_lens)
 
 
-
       allocate(pdis_cone(npatches_cone),cms_cone(3,npatches_cone), &
         rads_cone(npatches_cone),wts_cone(npts_cone))
-
+      print *, npatches_cone,npts_cone
       call get_qwts(npatches_cone,norders_cone,ixyzs_cone,iptype_cone, &
         npts_cone,srcvals_cone,wts_cone)
       call get_patch_distortion(npatches_cone,norders_cone,ixyzs_cone, &
@@ -617,7 +617,7 @@
         npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
-        norders_cone, ixyzys_cone, iptype_cone, npts_cone, &
+        norders_cone, ixyzs_cone, iptype_cone, npts_cone, &
         srcvals_cone, srccoefs_cone, npatches_lens, &
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)

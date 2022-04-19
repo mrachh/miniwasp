@@ -93,7 +93,7 @@
       call get_axissym_miniwasp_geom(rlam,ppw,norder,npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
-        norders_cone, ixyzys_cone, iptype_cone, npts_cone, &
+        norders_cone, ixyzs_cone, iptype_cone, npts_cone, &
         srcvals_cone, srccoefs_cone, npatches_lens, &
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)
@@ -593,7 +593,7 @@
         npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
-        norders_cone, ixyzys_cone, iptype_cone, npts_cone, &
+        norders_cone, ixyzs_cone, iptype_cone, npts_cone, &
         srcvals_cone, srccoefs_cone, npatches_lens, &
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)

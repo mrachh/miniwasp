@@ -82,7 +82,7 @@
       norder = 5
       ibc = 0
       irlam = 4
-      iref = 2
+      iref = 3
 
 
       if(irlam.eq.1) rlam = 550.0d0
@@ -104,8 +104,8 @@
 
 
       rsc = 1.0d0
-      iinc_include(1) = 0
-      iinc_include(2) = 1
+      iinc_include(1) = 1
+      iinc_include(2) = 0
       iinc_include(3) = 0
       iinc_include(4) = 0
 
@@ -175,7 +175,7 @@
         npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
-        norders_cone, ixyzys_cone, iptype_cone, npts_cone, &
+        norders_cone, ixyzs_cone, iptype_cone, npts_cone, &
         srcvals_cone, srccoefs_cone, npatches_lens, &
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)
@@ -658,7 +658,7 @@
         npatches_rhab, &
         norders_rhab, ixyzs_rhab, iptype_rhab, npts_rhab, &
         srcvals_rhab, srccoefs_rhab, npatches_cone, &
-        norders_cone, ixyzys_cone, iptype_cone, npts_cone, &
+        norders_cone, ixyzs_cone, iptype_cone, npts_cone, &
         srcvals_cone, srccoefs_cone, npatches_lens, &
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)
