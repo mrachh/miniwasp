@@ -81,8 +81,8 @@
       ppw = 5
       norder = 5
       ibc = 0
-      irlam = 4
-      iref = 3
+      irlam = 3
+      iref = 1
 
 
       if(irlam.eq.1) rlam = 550.0d0
@@ -169,7 +169,7 @@
       allocate(iptype_pigm(npatches_pigm),ixyzs_pigm(npatches_pigm+1))
       allocate(norders_pigm(npatches_pigm))
       
-      ifplot = 0
+      ifplot = 1
 
       call get_axissym_miniwasp_geom(rlam0,ppw,iref,norder, &
         npatches_rhab, &
@@ -179,6 +179,7 @@
         srcvals_cone, srccoefs_cone, npatches_lens, &
         norders_lens, ixyzs_lens, iptype_lens, npts_lens, &
         srcvals_lens, srccoefs_lens,ifplot)
+      stop
 
       call get_ellipsoid_geom_polar_nc(rpigm,rpigm,rpigm,xyzc_pigm, &
         rlam0,ppw0,norder,npatches_pigm,norders_pigm,ixyzs_pigm, &
@@ -901,6 +902,10 @@
        call surf_vtk_plot(npatches_rhab,norders_rhab,ixyzs_rhab, &
          iptype_rhab,npts_rhab,srccoefs_rhab,srcvals_rhab, &
          'rhabdom_axissym.vtk','a')
+       call surf_quadratic_msh_vtk_plot(npatches_rhab,norders_rhab, &
+         ixyzs_rhab,iptype_rhab,npts_rhab,srccoefs_rhab,srcvals_rhab, &
+         'rhabdom_axissym_msh.vtk','a')
+
 
         call surf_vtk_plot(npatches_cone,norders_cone,ixyzs_cone, &
          iptype_cone,npts_cone,srccoefs_cone, srcvals_cone, &
@@ -976,6 +981,8 @@
 
       call lematrin(k,2,xs,amatrint,ts,work)
 
+      iasp = 5
+
       npatches = 0
       do ich=1,nch
 !
@@ -993,8 +1000,18 @@
         if(rs(1).ge.rmax) rmax = rs(1)
         if(rs(2).ge.rmax) rmax = rs(2)
 
-        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
-        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
+        if(rlen.ge.iasp*2*pi*rmax) then
+          nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))
+          ns = ceiling(nt*rlen/2/pi/rmax/(iasp+0.0d0))
+        else if(2*pi*rmax.ge.iasp*rlen) then
+          ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))
+          nt = ceiling(ns*2*pi*rmax/rlen/(iasp+0.0d0))
+        else
+          ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))
+          nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        endif
+        ns = ns*iref
+        nt = nt*iref
         npatches = npatches + 2*ns*nt
       enddo
 
@@ -1100,6 +1117,7 @@
       npatches0 = 0
       nover = 0
       istart = 1
+      iasp = 5
       do ich=1,nch
 !
 !  find max r on each patch, and length of each patch
@@ -1116,9 +1134,19 @@
         enddo
         if(rs(1).ge.rmax) rmax = rs(1)
         if(rs(2).ge.rmax) rmax = rs(2)
+        if(rlen.ge.iasp*2*pi*rmax) then
+          nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))
+          ns = ceiling(nt*rlen/2/pi/rmax/(iasp+0.0d0))
+        else if(2*pi*rmax.ge.iasp*rlen) then
+          ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))
+          nt = ceiling(ns*2*pi*rmax/rlen/(iasp+0.0d0))
+        else
+          ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))
+          nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))
+        endif
+        ns = ns*iref
+        nt = nt*iref
 
-        ns = ceiling(rlen*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
-        nt = ceiling(rmax*2*pi*(ppw+0.0d0)/rlam/(norder+0.0d0))*iref
         call xtri_rectmesh_ani(umin,umax,vmin,vmax,ns,nt,nover, &
           npatches,npatches0,triaskel(1,1,istart))
         ichuse(istart:(istart+2*ns*nt-1)) = ich 
